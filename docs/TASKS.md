@@ -291,13 +291,13 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
 
 ### 6.4 OTO3 — Audiobook
 
-- [ ] **T6.11** 🗄️ Migration: `audiobooks` (bucket T1.6 me)
-- [ ] **T6.12** 🤖 `packages/ai/replicate.ts` TTS (Kokoro): voice, speed, chunked input, usage
-- [ ] **T6.13** ⚙️ `exporters/audio`: text clean (markdown strip, scene-break pauses), chunking (~1,000 chars), ffmpeg concat + loudnorm + silence padding + MP3 192k CBR mono 44.1k, opening/closing credits, 2400×2400 cover
+- [x] **T6.11** 🗄️ Migration: `audiobooks` (bucket T1.6 me)
+- [x] **T6.12** 🤖 `packages/ai/replicate.ts` TTS (Kokoro): voice, speed, chunked input, usage
+- [x] **T6.13** ⚙️ `exporters/audio`: text clean (markdown strip, scene-break pauses), chunking (~1,000 chars), ffmpeg concat + loudnorm + silence padding + MP3 192k CBR mono 44.1k, opening/closing credits, 2400×2400 cover
   - _Done when:_ ffprobe/ffmpeg test se ACX specs (RMS, peak, noise floor ≤ −60 dB, bitrate, sample rate) pass hon.
-- [ ] **T6.14** ⚙️ `processors/audio/audiobook.ts` (audio credits pool, per-chapter progress, resume)
+- [x] **T6.14** ⚙️ `processors/audio/audiobook.ts` (audio credits pool, per-chapter progress, resume)
   - _Depends:_ T6.11–T6.13
-- [ ] **T6.15** 🎨 Audiobook Series page: book select, curated voices + preview samples, speed, generate, chapter player, ZIP download, lite/full limits
+- [x] **T6.15** 🎨 Audiobook Series page: book select, curated voices + preview samples, speed, generate, chapter player, ZIP download, lite/full limits
   - _Depends:_ T6.14
 
 ### 6.5 OTO4 — Agency
