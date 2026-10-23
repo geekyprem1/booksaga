@@ -302,8 +302,8 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
 
 ### 6.5 OTO4 — Agency
 
-- [ ] **T6.16** 🗄️ RLS: agency owner gets read-only access to client series (the `agency_clients` table already exists since T1.6)
-- [ ] **T6.17** ⚙️🎨 Agency Clients page: create client (auto password, Copy Login Details), list, suspend/activate, view client series (read-only), limits 25/100, owner-plan features for clients, **agency pool** (one-time: Ag-Lite +2,000 / Ag +5,000) ka balance + har client ka allotment/used/remaining aur allotment edit, client license PDF
+- [x] **T6.16** 🗄️ RLS: agency owner gets read-only access to client series (the `agency_clients` table already exists since T1.6)
+- [x] **T6.17** ⚙️🎨 Agency Clients page: create client (auto password, Copy Login Details), list, suspend/activate, view client series (read-only), limits 25/100, owner-plan features for clients, **agency pool** (one-time: Ag-Lite +2,000 / Ag +5,000) ka balance + har client ka allotment/used/remaining aur allotment edit, client license PDF
   - _Done when:_ client ka job owner ke agency pool se kate (owner ka main pool untouched), aur allotment khatam hone pe `CLIENT_ALLOTMENT_EXHAUSTED` aaye.
   - _Depends:_ T6.16, T1.18
 
