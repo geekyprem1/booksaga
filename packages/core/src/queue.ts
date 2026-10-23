@@ -167,23 +167,32 @@ export async function enqueueJob(
   queues: Queues,
   input: EnqueueJobInput,
 ): Promise<EnqueueJobResult> {
-  const key = idempotencyKey(input.type, input.refId, input.userId, input.version ?? 1);
+  const baseKey = idempotencyKey(input.type, input.refId, input.userId, input.version ?? 1);
+  let key = baseKey;
+  let jobId: string | null = null;
 
-  const inserted = await db
-    .from('jobs')
-    .insert({
-      user_id: input.userId,
-      type: input.type,
-      ref_id: input.refId,
-      status: 'queued',
-      idempotency_key: key,
-      credits_reserved: input.amount,
-      meta: (input.payload ?? {}) as JobMeta,
-    })
-    .select('id')
-    .single();
+  // Two attempts: a duplicate on a *finished* job means "the user wants this again", so the key is
+  // bumped once and the insert retried. A duplicate on a live job is a real double click.
+  for (let attempt = 0; attempt < 2 && !jobId; attempt++) {
+    const inserted = await db
+      .from('jobs')
+      .insert({
+        user_id: input.userId,
+        type: input.type,
+        ref_id: input.refId,
+        status: 'queued',
+        idempotency_key: key,
+        credits_reserved: input.amount,
+        meta: (input.payload ?? {}) as JobMeta,
+      })
+      .select('id')
+      .single();
 
-  if (inserted.error || !inserted.data) {
+    if (!inserted.error && inserted.data) {
+      jobId = inserted.data.id;
+      break;
+    }
+
     const message = inserted.error?.message ?? '';
 
     // The per-user "one book job at a time" partial unique index.
@@ -197,18 +206,30 @@ export async function enqueueJob(
     if (inserted.error?.code === '23505') {
       const existing = await db
         .from('jobs')
-        .select('id, ledger_id')
+        .select('id, ledger_id, status')
         .eq('idempotency_key', key)
         .maybeSingle();
+
       if (existing.data) {
-        return { jobId: existing.data.id, deduplicated: true, ledgerId: existing.data.ledger_id };
+        const finished =
+          existing.data.status === 'completed' ||
+          existing.data.status === 'failed' ||
+          existing.data.status === 'cancelled';
+
+        if (!finished) {
+          return { jobId: existing.data.id, deduplicated: true, ledgerId: existing.data.ledger_id };
+        }
+
+        // Retry of a finished job: bump the key so the work can run again.
+        key = `${baseKey}-r${Date.now().toString(36)}`;
+        continue;
       }
     }
 
     throw new Error(`Failed to create the job: ${message}`);
   }
 
-  const jobId = inserted.data.id;
+  if (!jobId) throw new Error('Failed to create the job.');
 
   let ledgerId: number | null = null;
   if (!input.skipCredits) {

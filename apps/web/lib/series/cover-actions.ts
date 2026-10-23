@@ -47,6 +47,9 @@ export async function generateCoverAction(
       source,
       action,
       amount: cost.credits,
+      // A fresh key per click: without it the second variation deduplicates onto the first job
+      // and the UI just reopens an already-finished job.
+      version: Math.floor(Date.now() / 1000),
       payload: { variation: true },
       reason: 'Cover generation',
     });

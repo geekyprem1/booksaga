@@ -224,6 +224,12 @@ async function main(): Promise<void> {
     apiKey: env.OPENROUTER_API_KEY,
     model: env.OPENROUTER_TEXT_MODEL,
     db,
+    // Image + speech go through Replicate. Without these the client silently stays on mock art and
+    // mock audio even in live mode.
+    replicateToken: env.REPLICATE_API_TOKEN,
+    imageModel: env.REPLICATE_IMAGE_MODEL,
+    imageQuality: env.REPLICATE_IMAGE_QUALITY,
+    speechModel: env.REPLICATE_TTS_MODEL,
   });
 
   // Structured, low-creativity steps run on the optional fast model (same key, same usage log).
