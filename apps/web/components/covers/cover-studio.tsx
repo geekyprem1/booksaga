@@ -71,10 +71,10 @@ export function CoverStudio({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           {style?.artPrompt
-            ? `Series style locked Â· palette: ${(style.palette ?? []).join(', ')}`
+            ? `Series style locked · palette: ${(style.palette ?? []).join(', ')}`
             : 'The first cover you generate locks the art style for the whole series.'}
         </p>
-        <Badge variant="muted">{credits} credits Â· {cost} per cover</Badge>
+        <Badge variant="muted">{credits} credits · {cost} per cover</Badge>
       </div>
 
       {error ? (
@@ -154,7 +154,7 @@ export function CoverStudio({
                   ) : (
                     <Sparkles aria-hidden="true" />
                   )}
-                  {book.covers.length > 0 ? 'Generate variation' : 'Generate cover'} Â· {cost} cr
+                  {book.covers.length > 0 ? 'Generate variation' : 'Generate cover'} · {cost} cr
                 </Button>
               </CardContent>
             </Card>
@@ -165,7 +165,7 @@ export function CoverStudio({
       {books.length === 0 ? (
         <Card>
           <CardContent className="p-10 text-center text-sm text-muted-foreground">
-            Write a part first â€” covers are generated per book.
+            Write a part first — covers are generated per book.
           </CardContent>
         </Card>
       ) : null}

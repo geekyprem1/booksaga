@@ -3,16 +3,19 @@
  *
  *   1. Direct the series once (artPrompt + palette + font) and lock it on `series.cover_style`.
  *   2. Paint this book's scene with gpt-image-2 (2:3, text-less).
- *   3. Produce the two shipping files with sharp: ebook 1600×2560 and print front 1856×2784.
+ *   3. Produce the two shipping files with sharp: ebook 1600Ã—2560 and print front 1856Ã—2784.
  *   4. Save a `covers` row and make it the active cover for the book.
  *
  * Text overlay (title/author) is composed separately, so the original art stays reusable.
  */
 import { randomUUID } from 'node:crypto';
-import sharp from 'sharp';
 import { coverBriefSchema, type Bible, type CoverBrief } from '@booksaga/shared';
 import type { AiClient } from '@booksaga/ai';
-import type { DbClient } from '@booksaga/core';
+import { composeCover, defaultLayers } from '@booksaga/exporters';
+import type { Database, DbClient } from '@booksaga/core';
+
+type JsonColumn = Database['public']['Tables']['covers']['Insert']['layers'];
+const asJson = (value: unknown) => value as NonNullable<JsonColumn>;
 import type { JobRunner } from '../../lib/jobs';
 import { coverBriefPrompt, coverImagePrompt, fallbackBrief } from '../../prompts/v1/cover';
 
@@ -113,11 +116,31 @@ export async function processCover(
     .upload(artPath, art.buffer, { contentType: 'image/png', upsert: true });
   if (artUpload.error) throw new Error(`Could not store the artwork: ${artUpload.error.message}`);
 
-  await runner.progress(70, 'Building the ebook and print files');
+  await runner.progress(70, 'Setting the title and author');
+
+  const layers = defaultLayers({
+    seriesTitle: series.title,
+    title: book.title || `Part ${book.part_number}`,
+    partNumber: book.part_number,
+    author: series.pen_name || 'Unknown Author',
+    palette: style.palette,
+  });
 
   const [ebook, print] = await Promise.all([
-    sharp(art.buffer).resize(1600, 2560, { fit: 'cover', position: 'centre' }).jpeg({ quality: 90 }).toBuffer(),
-    sharp(art.buffer).resize(1856, 2784, { fit: 'cover', position: 'centre' }).jpeg({ quality: 90 }).toBuffer(),
+    composeCover({
+      art: art.buffer,
+      width: 1600,
+      height: 2560,
+      layers,
+      fontFamily: style.fontFamily,
+    }),
+    composeCover({
+      art: art.buffer,
+      width: 1856,
+      height: 2784,
+      layers,
+      fontFamily: style.fontFamily,
+    }),
   ]);
 
   const ebookPath = `${basePath}/ebook-${coverId}.jpg`;
@@ -135,7 +158,7 @@ export async function processCover(
 
   await runner.progress(90, 'Saving the cover');
 
-  // Only one active cover per (book, type) — the partial unique index enforces it.
+  // Only one active cover per (book, type) â€” the partial unique index enforces it.
   await db.from('covers').update({ is_active: false }).eq('book_id', book.id).eq('type', 'ebook');
 
   const { data: cover, error: insertError } = await db
@@ -148,12 +171,15 @@ export async function processCover(
       mode: 'overlay',
       prompt,
       is_active: true,
-      layers: {
+      layers: asJson({
+        version: 1,
         width: 1600,
         height: 2560,
+        fontFamily: style.fontFamily,
+        items: layers,
         print: { path: printPath, width: 1856, height: 2784 },
         style,
-      },
+      }),
     })
     .select('id')
     .single();

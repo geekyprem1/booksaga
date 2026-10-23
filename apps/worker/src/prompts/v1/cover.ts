@@ -35,7 +35,7 @@ export function coverBriefPrompt(input: CoverBriefInput): Prompt {
 RULES
 - artPrompt: a reusable art-direction sentence for the whole series (medium, lighting, texture, composition). No book-specific content.
 - palette: 3-4 evocative colour names that fit the genre and tone.
-- scene: ONE concrete visual scene for THIS book Ã¢â‚¬â€ a place and a figure or object, no plot summary, no text.
+- scene: ONE concrete visual scene for THIS book — a place and a figure or object, no plot summary, no text.
 - fontFamily: one of "serif" | "sans" | "display".
 - Never include text, letters, titles or logos in any field. Return JSON only.`,
     messages: [

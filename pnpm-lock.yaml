@@ -183,6 +183,9 @@ importers:
       '@booksaga/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@booksaga/exporters':
+        specifier: workspace:*
+        version: link:../../packages/exporters
       '@booksaga/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -261,6 +264,9 @@ importers:
       '@booksaga/shared':
         specifier: workspace:*
         version: link:../shared
+      '@napi-rs/canvas':
+        specifier: 1.0.13
+        version: 1.0.13
     devDependencies:
       typescript:
         specifier: 5.9.3

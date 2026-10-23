@@ -1,5 +1,5 @@
 /**
- * Book generation pipeline (T2.15, ARCH Â§6).
+ * Book generation pipeline (T2.15, ARCH §6).
  *
  *   series plan (part 1 only) -> outline -> chapter loop -> continuity -> metadata -> unlock next
  *
@@ -271,7 +271,7 @@ export async function processBook(
    *
    * This is the only step that overlaps with writing: chapter N+1 is written while chapter N's
    * facts are extracted. Only one extraction is ever in flight, so merges stay strictly ordered,
-   * and the next chapter still receives the previous chapter's prose through `previousTail` â€” the
+   * and the next chapter still receives the previous chapter's prose through `previousTail` — the
    * structured facts catch up one chapter later, which is what makes the overlap safe.
    */
   const extractFacts = async (target: (typeof all)[number], text: string): Promise<void> => {
@@ -480,7 +480,7 @@ export async function processBook(
   await runner.progress(99, 'Finishing up');
   await runner.complete({
     title: `Part ${book.part_number} is ready`,
-    body: `${book.title || metadata.data.title} â€” ${totalWords.toLocaleString()} words. Open it to edit, cover and export.`,
+    body: `${book.title || metadata.data.title} — ${totalWords.toLocaleString()} words. Open it to edit, cover and export.`,
     link: `/series/${series.id}`,
     type: 'book_ready',
   });

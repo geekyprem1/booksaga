@@ -13,7 +13,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@booksaga/shared": "workspace:*"
+    "@booksaga/shared": "workspace:*",
+    "@napi-rs/canvas": "1.0.13"
   },
   "devDependencies": {
     "typescript": "5.9.3"
