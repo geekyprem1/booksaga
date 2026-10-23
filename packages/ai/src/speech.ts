@@ -101,7 +101,7 @@ export async function replicateSpeech(
   };
 }
 
-/** Deterministic mock: a real PCM WAV whose length follows the text (â‰ˆ150 wpm). */
+/** Deterministic mock: a real PCM WAV whose length follows the text (≈150 wpm). */
 export function mockSpeech(req: SpeechRequest): SpeechResult {
   const words = req.text.trim().split(/\s+/).filter(Boolean).length;
   const speed = req.speed ?? 1;

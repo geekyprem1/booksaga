@@ -201,7 +201,7 @@ export function CreateSeriesForm({
                   rows={5}
                   value={idea}
                   onChange={(e) => setIdea(e.target.value)}
-                  placeholder="A harbour city where debts are inherited like weather. When a reclusive bookkeeper dies, her estranged niece inherits a ledger that proves half the city's founding families bought their reputationsÃ¢â‚¬Â¦"
+                  placeholder="A harbour city where debts are inherited like weather. When a reclusive bookkeeper dies, her estranged niece inherits a ledger that proves half the city's founding families bought their reputations…"
                   className="w-full resize-y rounded-lg border border-input bg-background/60 p-3 text-sm placeholder:text-muted-foreground/60 focus-visible:border-ring"
                 />
                 <p className="text-xs text-muted-foreground">{idea.length} / 2000</p>
@@ -378,7 +378,7 @@ export function CreateSeriesForm({
                     >
                       {['5x8', '5.25x8', '5.5x8.5', '6x9'].map((t) => (
                         <option key={t} value={t}>
-                          {t.replace('x', ' Ãƒâ€” ')} in
+                          {t.replace('x', ' × ')} in
                         </option>
                       ))}
                     </Select>
@@ -450,7 +450,7 @@ export function CreateSeriesForm({
           <div className="flex flex-wrap items-center gap-3">
             <Button type="submit" size="lg" disabled={pending || !canAfford}>
               {pending ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Wand2 aria-hidden="true" />}
-              Generate Part 1 Ã‚Â· {bookCost} credits
+              Generate Part 1 · {bookCost} credits
             </Button>
             <Button
               type="button"
@@ -459,7 +459,7 @@ export function CreateSeriesForm({
               onClick={handleEnhance}
               disabled={pending || idea.trim().length < 20}
             >
-              <Sparkles aria-hidden="true" /> Enhance with AI Ã‚Â· {costs.enhance} credit
+              <Sparkles aria-hidden="true" /> Enhance with AI · {costs.enhance} credit
             </Button>
             <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <Coins className="size-4 text-amber" aria-hidden="true" />

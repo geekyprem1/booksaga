@@ -133,7 +133,7 @@ export async function processBookExport(
     }
   }
 
-  // The wrap needs the larger print art (1856Ã—2784) to stay above 300 DPI across 6.125in.
+  // The wrap needs the larger print art (1856×2784) to stay above 300 DPI across 6.125in.
   let printArt: { buffer: Buffer; width: number; height: number } | null = null;
   const printPath = (activeCover?.layers as { print?: { path?: string } } | null)?.print?.path;
   if (printPath) {
@@ -224,7 +224,7 @@ export async function processBookExport(
   if (formats.includes('wrap')) {
     await runner.progress(78, 'Building the paperback wrap');
     if (!pdfPages) throw new Error('The wrap needs the print PDF page count.');
-    if (!printArt) throw new Error('This book has no print cover yet â€” generate a cover first.');
+    if (!printArt) throw new Error('This book has no print cover yet — generate a cover first.');
 
     const wrapSettings = (series.settings ?? {}) as { trim?: TrimSize; paper?: PaperStock };
     const wrapTrim: TrimSize =
@@ -322,7 +322,7 @@ export async function processBookExport(
   await runner.progress(98, 'Done');
   await runner.complete({
     title: 'Your files are ready',
-    body: `${title} â€” ${formats.join(', ')}. The download link works for ${EXPIRY_DAYS} days.`,
+    body: `${title} — ${formats.join(', ')}. The download link works for ${EXPIRY_DAYS} days.`,
     link: `/series/${series.id}/exports`,
     type: 'export_ready',
   });

@@ -299,11 +299,11 @@ async function main(): Promise<void> {
   const server = startHealthServer(runtime);
 
   console.log(
-    `[worker] up Ã‚Â· queues=${[...enabled].join(',')} Ã‚Â· text=${concurrency.text} Ã‚Â· ai_mode=${env.AI_MODE}`,
+    `[worker] up · queues=${[...enabled].join(',')} · text=${concurrency.text} · ai_mode=${env.AI_MODE}`,
   );
 
   const shutdown = async (signal: string) => {
-    console.log(`[worker] ${signal} received, drainingÃ¢â‚¬Â¦`);
+    console.log(`[worker] ${signal} received, draining…`);
     server.close();
     await Promise.all(runtime.workers.map((w) => w.close()));
     await closeQueues(queues);

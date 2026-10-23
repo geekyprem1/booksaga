@@ -232,7 +232,7 @@ export async function processBoxSet(
   await runner.progress(98, 'Done');
   await runner.complete({
     title: 'Your box set is ready',
-    body: `${data.title} â€” ${ordered.length} books in one EPUB.`,
+    body: `${data.title} — ${ordered.length} books in one EPUB.`,
     link: `/series/${series.id}/box-set`,
     type: 'export_ready',
   });

@@ -134,7 +134,7 @@ export async function setClientAllotmentAction(
     if (allotment < link.used) {
       throw new AppError(
         'VALIDATION',
-        `This client has already used ${link.used} credits â€” the allotment cannot go below that.`,
+        `This client has already used ${link.used} credits — the allotment cannot go below that.`,
       );
     }
 

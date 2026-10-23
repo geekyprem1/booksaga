@@ -15,7 +15,7 @@ const input = z.object({
   formats: z.array(z.enum(['epub', 'pdf', 'docx', 'metadata', 'wrap'])).min(1).max(5),
 });
 
-/** Export a book (T5.7). Re-exports are free â€” no AI work happens. */
+/** Export a book (T5.7). Re-exports are free — no AI work happens. */
 export async function exportBookAction(
   raw: z.infer<typeof input>,
 ): Promise<ActionResult<{ jobId: string }>> {

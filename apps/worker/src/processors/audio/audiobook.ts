@@ -2,7 +2,7 @@
  * Audiobook narration (T6.14).
  *
  * Per chapter: clean the prose, chunk it to Kokoro's limit, synthesise each chunk, master the
- * concatenation with ffmpeg (ACX specs), upload the MP3 and record it on the row â€” so a retry
+ * concatenation with ffmpeg (ACX specs), upload the MP3 and record it on the row — so a retry
  * resumes instead of paying for the same chapter twice.
  */
 import { randomUUID } from 'node:crypto';
@@ -159,7 +159,7 @@ export async function processAudiobook(
 
   await runner.progress(92, 'Packaging the audiobook');
 
-  // 2400Ã—2400 square cover for the store listing.
+  // 2400×2400 square cover for the store listing.
   let coverPath = existing?.cover_path ?? null;
   if (!coverPath) {
     const { data: activeCover } = await db
@@ -238,7 +238,7 @@ export async function processAudiobook(
   await runner.progress(99, 'Done');
   await runner.complete({
     title: 'Your audiobook is ready',
-    body: `${title} â€” ${Math.round(totalSeconds / 60)} minutes, ${finished.length} files.`,
+    body: `${title} — ${Math.round(totalSeconds / 60)} minutes, ${finished.length} files.`,
     link: `/series/${series.id}/audiobook`,
     type: 'export_ready',
   });

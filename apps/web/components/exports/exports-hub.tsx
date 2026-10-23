@@ -170,7 +170,7 @@ export function ExportsHub({
                 ) : (
                   <FileArchive aria-hidden="true" />
                 )}
-                {book.status === 'generated' ? 'Export Ã‚Â· free' : 'Write this part first'}
+                {book.status === 'generated' ? 'Export · free' : 'Write this part first'}
               </Button>
             </CardContent>
           </Card>
@@ -193,13 +193,13 @@ export function ExportsHub({
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{row.bookTitle}</p>
                     <p className="text-xs text-muted-foreground">
-                      {row.formats.join(' Ã‚Â· ')} Ã‚Â·{' '}
+                      {row.formats.join(' · ')} ·{' '}
                       {new Date(row.createdAt).toLocaleString(undefined, {
                         dateStyle: 'medium',
                         timeStyle: 'short',
                       })}
                       {row.expiresAt
-                        ? ` Ã‚Â· expires ${new Date(row.expiresAt).toLocaleDateString()}`
+                        ? ` · expires ${new Date(row.expiresAt).toLocaleDateString()}`
                         : ''}
                     </p>
                   </div>

@@ -1,5 +1,5 @@
 /**
- * The AI facade used by the worker (T2.2â€“T2.5, T4.2).
+ * The AI facade used by the worker (T2.2–T2.5, T4.2).
  *
  *   const ai = createAi({ mode, apiKey, model, db });
  *   const chapter = await ai.text({ ... });           // plain prose

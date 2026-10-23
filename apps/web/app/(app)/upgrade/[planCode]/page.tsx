@@ -42,7 +42,7 @@ export default async function UpgradePage({ params }: { params: Promise<{ planCo
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
               The checkout link for this upgrade has not been configured yet. Ask your admin to set
-              it under Admin â†’ Settings â†’ OTO links, then reopen this page.
+              it under Admin → Settings → OTO links, then reopen this page.
             </p>
           </div>
           <div className="flex flex-wrap justify-center gap-2">
