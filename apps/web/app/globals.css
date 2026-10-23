@@ -1,6 +1,26 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+/* Cover fonts — the same OFL files the worker composes with, so the Konva preview matches. */
+@font-face {
+  font-family: 'BSSerif';
+  src: url('/fonts/PlayfairDisplay-VF.ttf') format('truetype');
+  font-weight: 400 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'BSSans';
+  src: url('/fonts/Montserrat-VF.ttf') format('truetype');
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'BSDisplay';
+  src: url('/fonts/Cinzel-VF.ttf') format('truetype');
+  font-weight: 400 900;
+  font-display: swap;
+}
+
 /* BookSaga design tokens (PRD §8.0): dark navy surfaces + blue → violet → pink neon gradient. */
 :root {
   --background: #0b1023;

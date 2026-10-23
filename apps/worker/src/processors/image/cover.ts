@@ -3,7 +3,7 @@
  *
  *   1. Direct the series once (artPrompt + palette + font) and lock it on `series.cover_style`.
  *   2. Paint this book's scene with gpt-image-2 (2:3, text-less).
- *   3. Produce the two shipping files with sharp: ebook 1600Ã—2560 and print front 1856Ã—2784.
+ *   3. Produce the two shipping files with sharp: ebook 1600×2560 and print front 1856×2784.
  *   4. Save a `covers` row and make it the active cover for the book.
  *
  * Text overlay (title/author) is composed separately, so the original art stays reusable.
@@ -11,7 +11,7 @@
 import { randomUUID } from 'node:crypto';
 import { coverBriefSchema, type Bible, type CoverBrief } from '@booksaga/shared';
 import type { AiClient } from '@booksaga/ai';
-import { composeCover, defaultLayers } from '@booksaga/exporters';
+import { composeCover, defaultLayers, type CoverLayer } from '@booksaga/exporters';
 import type { Database, DbClient } from '@booksaga/core';
 
 type JsonColumn = Database['public']['Tables']['covers']['Insert']['layers'];
@@ -26,6 +26,10 @@ export interface CoverJobData {
   refId: string;
   /** Regenerate an existing cover instead of creating a new one. */
   variation?: boolean;
+  /** Re-render an existing cover with edited layers (no AI call, no credits). */
+  recompose?: boolean;
+  coverId?: string;
+  layers?: CoverLayer[];
 }
 
 export async function processCover(
@@ -34,6 +38,10 @@ export async function processCover(
   data: CoverJobData,
 ): Promise<void> {
   const { db, ai } = deps;
+
+  if (data.recompose && data.coverId && data.layers) {
+    return recomposeCover({ db }, runner, data as CoverJobData & { coverId: string; layers: CoverLayer[] });
+  }
 
   const { data: book } = await db.from('books').select('*').eq('id', data.refId).maybeSingle();
   if (!book) throw new Error(`Book ${data.refId} not found`);
@@ -158,7 +166,7 @@ export async function processCover(
 
   await runner.progress(90, 'Saving the cover');
 
-  // Only one active cover per (book, type) â€” the partial unique index enforces it.
+  // Only one active cover per (book, type) — the partial unique index enforces it.
   await db.from('covers').update({ is_active: false }).eq('book_id', book.id).eq('type', 'ebook');
 
   const { data: cover, error: insertError } = await db
@@ -191,4 +199,88 @@ export async function processCover(
     link: `/series/${series.id}/covers`,
     type: 'cover_ready',
   });
+}
+
+/**
+ * Re-render an edited cover: same artwork, new text layout. No AI call and no credits — the layer
+ * JSON was already validated and stored by the web action.
+ */
+async function recomposeCover(
+  deps: { db: DbClient },
+  runner: JobRunner,
+  data: CoverJobData & { coverId: string; layers: CoverLayer[] },
+): Promise<void> {
+  const { db } = deps;
+
+  const { data: cover } = await db
+    .from('covers')
+    .select('id, book_id, art_path, layers')
+    .eq('id', data.coverId)
+    .maybeSingle();
+  if (!cover?.art_path) throw new Error(`Cover ${data.coverId} has no artwork.`);
+
+  const { data: book } = await db
+    .from('books')
+    .select('series_id')
+    .eq('id', cover.book_id)
+    .maybeSingle();
+  const { data: series } = book
+    ? await db.from('series').select('user_id').eq('id', book.series_id).maybeSingle()
+    : { data: null };
+  if (!series || series.user_id !== data.userId) {
+    throw new Error('This cover does not belong to the job owner.');
+  }
+
+  await runner.progress(40, 'Re-rendering the cover');
+
+  const art = await db.storage.from('cover-art').download(cover.art_path);
+  if (art.error || !art.data) throw new Error('Could not read the artwork.');
+  const artBuffer = Buffer.from(await art.data.arrayBuffer());
+
+  const meta = (cover.layers ?? {}) as { fontFamily?: 'serif' | 'sans' | 'display' };
+
+  const [ebook, print] = await Promise.all([
+    composeCover({
+      art: artBuffer,
+      width: 1600,
+      height: 2560,
+      layers: data.layers,
+      fontFamily: meta.fontFamily ?? 'serif',
+    }),
+    composeCover({
+      art: artBuffer,
+      width: 1856,
+      height: 2784,
+      layers: data.layers,
+      fontFamily: meta.fontFamily ?? 'serif',
+    }),
+  ]);
+
+  const basePath = cover.art_path.replace(/\/[^/]+$/, '');
+  const ebookPath = `${basePath}/ebook-${cover.id}.jpg`;
+  const printPath = `${basePath}/print-${cover.id}.jpg`;
+
+  const [ebookUpload, printUpload] = await Promise.all([
+    db.storage.from('covers').upload(ebookPath, ebook, { contentType: 'image/jpeg', upsert: true }),
+    db.storage.from('covers').upload(printPath, print, { contentType: 'image/jpeg', upsert: true }),
+  ]);
+  if (ebookUpload.error || printUpload.error) throw new Error('Could not store the edited cover.');
+
+  await db
+    .from('covers')
+    .update({
+      final_path: ebookPath,
+      layers: asJson({
+        ...meta,
+        version: 1,
+        width: 1600,
+        height: 2560,
+        items: data.layers,
+        print: { path: printPath, width: 1856, height: 2784 },
+      }),
+    })
+    .eq('id', cover.id);
+
+  await runner.progress(95, 'Saved');
+  await runner.complete();
 }

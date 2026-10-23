@@ -1,4 +1,5 @@
 import { CoverStudio, type CoverBook } from '@/components/covers/cover-studio';
+import type { CoverLayerData } from '@/components/covers/cover-editor';
 import { getAccount } from '@/lib/account';
 import { requireUser } from '@/lib/auth/session';
 import { getCreditCost } from '@/lib/credits';
@@ -28,18 +29,33 @@ export default async function SeriesCoversPage({ params }: { params: Promise<{ i
   const { data: covers } = bookIds.length
     ? await db
         .from('covers')
-        .select('id, book_id, final_path, is_active, created_at')
+        .select('id, book_id, final_path, art_path, layers, is_active, created_at')
         .in('book_id', bookIds)
         .eq('type', 'ebook')
         .order('created_at', { ascending: false })
-    : { data: [] as { id: string; book_id: string; final_path: string | null; is_active: boolean; created_at: string }[] };
+    : {
+        data: [] as {
+          id: string;
+          book_id: string;
+          final_path: string | null;
+          art_path: string | null;
+          layers: unknown;
+          is_active: boolean;
+          created_at: string;
+        }[],
+      };
 
   const signed = new Map<string, string | null>();
+  const artSigned = new Map<string, string | null>();
   await Promise.all(
     (covers ?? []).map(async (cover) => {
       if (!cover.final_path) return;
       const { data } = await db.storage.from('covers').createSignedUrl(cover.final_path, 3600);
       signed.set(cover.id, data?.signedUrl ?? null);
+      if (cover.art_path) {
+        const art = await db.storage.from('cover-art').createSignedUrl(cover.art_path, 3600);
+        artSigned.set(cover.id, art.data?.signedUrl ?? null);
+      }
     }),
   );
 
@@ -53,6 +69,12 @@ export default async function SeriesCoversPage({ params }: { params: Promise<{ i
       .map((cover) => ({
         id: cover.id,
         url: signed.get(cover.id) ?? null,
+        artUrl: artSigned.get(cover.id) ?? null,
+        layers:
+          ((cover.layers as { items?: unknown } | null)?.items as CoverLayerData[] | undefined) ?? [],
+        fontFamily:
+          ((cover.layers as { fontFamily?: 'serif' | 'sans' | 'display' } | null)?.fontFamily ??
+            'serif'),
         isActive: cover.is_active,
         createdAt: cover.created_at,
       })),
@@ -67,6 +89,8 @@ export default async function SeriesCoversPage({ params }: { params: Promise<{ i
       credits={credits}
       cost={cost.credits}
       style={series.cover_style as { artPrompt?: string; palette?: string[] } | null}
+      seriesTitle={series.title}
+      author={series.pen_name}
     />
   );
 }

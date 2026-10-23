@@ -1,17 +1,33 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import { ImageIcon, Loader2, Sparkles } from 'lucide-react';
+import { ImageIcon, Loader2, Pencil, Sparkles, Unlock } from 'lucide-react';
 import { Badge, Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { JobProgressDialog } from '@/components/jobs/job-progress-dialog';
-import { generateCoverAction, setActiveCoverAction } from '@/lib/series/cover-actions';
+import { defaultCoverLayers, type CoverLayerData } from '@/components/covers/cover-editor';
+import {
+  generateCoverAction,
+  setActiveCoverAction,
+  unlockCoverStyleAction,
+} from '@/lib/series/cover-actions';
 import { cn } from '@/lib/utils';
+
+// Konva touches `window` at import time, so the editor only ever loads in the browser.
+const CoverEditor = dynamic(
+  () => import('@/components/covers/cover-editor').then((mod) => mod.CoverEditor),
+  { ssr: false, loading: () => <p className="p-6 text-sm text-muted-foreground">Loading editor…</p> },
+);
 
 export interface CoverVariation {
   id: string;
   url: string | null;
+  artUrl: string | null;
+  layers: CoverLayerData[];
+  fontFamily: 'serif' | 'sans' | 'display';
   isActive: boolean;
   createdAt: string;
 }
@@ -30,17 +46,22 @@ export function CoverStudio({
   credits,
   cost,
   style,
+  seriesTitle,
+  author,
 }: {
   seriesId: string;
   books: CoverBook[];
   credits: number;
   cost: number;
   style: { artPrompt?: string; palette?: string[] } | null;
+  seriesTitle: string;
+  author: string;
 }) {
   const router = useRouter();
-  const [job, setJob] = useState<{ jobId: string; bookId: string } | null>(null);
+  const [job, setJob] = useState<{ jobId: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<CoverVariation | null>(null);
 
   async function generate(bookId: string) {
     setError(null);
@@ -51,7 +72,7 @@ export function CoverStudio({
       setError(response.error.message);
       return;
     }
-    setJob({ jobId: response.data.jobId, bookId });
+    setJob({ jobId: response.data.jobId });
   }
 
   async function activate(coverId: string) {
@@ -66,19 +87,48 @@ export function CoverStudio({
     router.refresh();
   }
 
+  async function unlockStyle() {
+    if (!confirm('Unlock the series look? The next cover will re-direct the art style.')) return;
+    setBusy('unlock');
+    const response = await unlockCoverStyleAction({ seriesId });
+    setBusy(null);
+    if (!response.ok) {
+      setError(response.error.message);
+      return;
+    }
+    router.refresh();
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          {style?.artPrompt
-            ? `Series style locked · palette: ${(style.palette ?? []).join(', ')}`
-            : 'The first cover you generate locks the art style for the whole series.'}
-        </p>
-        <Badge variant="muted">{credits} credits · {cost} per cover</Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm text-muted-foreground">
+            {style?.artPrompt
+              ? `Series style locked · palette: ${(style.palette ?? []).join(', ')}`
+              : 'The first cover you generate locks the art style for the whole series.'}
+          </p>
+          {style?.artPrompt ? (
+            <Button type="button" size="sm" variant="ghost" onClick={unlockStyle} disabled={busy !== null}>
+              {busy === 'unlock' ? (
+                <Loader2 className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Unlock aria-hidden="true" />
+              )}
+              Unlock style
+            </Button>
+          ) : null}
+        </div>
+        <Badge variant="muted">
+          {credits} credits · {cost} per cover
+        </Badge>
       </div>
 
       {error ? (
-        <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-rose-200">
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-rose-200"
+        >
           {error}
         </p>
       ) : null}
@@ -142,20 +192,40 @@ export function CoverStudio({
                   </div>
                 ) : null}
 
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={book.covers.length > 0 ? 'secondary' : 'default'}
-                  onClick={() => generate(book.id)}
-                  disabled={busy !== null || credits < cost || book.status === 'locked'}
-                >
-                  {busy === `generate-${book.id}` ? (
-                    <Loader2 className="animate-spin" aria-hidden="true" />
-                  ) : (
-                    <Sparkles aria-hidden="true" />
-                  )}
-                  {book.covers.length > 0 ? 'Generate variation' : 'Generate cover'} · {cost} cr
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={book.covers.length > 0 ? 'secondary' : 'default'}
+                    onClick={() => generate(book.id)}
+                    disabled={busy !== null || credits < cost || book.status === 'locked'}
+                    className="flex-1"
+                  >
+                    {busy === `generate-${book.id}` ? (
+                      <Loader2 className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Sparkles aria-hidden="true" />
+                    )}
+                    {book.status === 'locked'
+                      ? 'Write this part first'
+                      : book.covers.length > 0
+                        ? 'Variation'
+                        : 'Generate cover'}
+                    {book.status === 'locked' ? '' : ` · ${cost} cr`}
+                  </Button>
+
+                  {active?.artUrl ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditing(active)}
+                      aria-label={`Edit cover for ${book.title}`}
+                    >
+                      <Pencil aria-hidden="true" />
+                    </Button>
+                  ) : null}
+                </div>
               </CardContent>
             </Card>
           );
@@ -180,6 +250,36 @@ export function CoverStudio({
           router.refresh();
         }}
       />
+
+      <Dialog open={Boolean(editing)} onOpenChange={(open) => (!open ? setEditing(null) : undefined)}>
+        <DialogContent
+          title="Cover editor"
+          description="Drag the text, then save — the server re-renders the final files."
+          className="max-w-4xl"
+        >
+          {editing?.artUrl ? (
+            <CoverEditor
+              coverId={editing.id}
+              artUrl={editing.artUrl}
+              initialLayers={
+                editing.layers.length > 0
+                  ? editing.layers
+                  : defaultCoverLayers({
+                      seriesTitle,
+                      title: books.find((b) => b.covers.some((c) => c.id === editing.id))?.title ?? 'Untitled',
+                      partNumber: books.find((b) => b.covers.some((c) => c.id === editing.id))?.partNumber ?? 1,
+                      author,
+                    })
+              }
+              fontFamily={editing.fontFamily}
+              onSaved={(jobId) => {
+                setEditing(null);
+                setJob({ jobId });
+              }}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

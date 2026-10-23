@@ -207,7 +207,7 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
 - [x] **T4.1** 🗄️ Migration `0005_covers.sql`: `covers` (`page_count`, `stale` ke saath), `images` (buckets aur unki policies T1.6 me ban chuke hain)
 - [x] **T4.2** 🤖 `packages/ai/replicate.ts` image: gpt-image-2 input mapping (Replicate model schema verify karna: 1856×2784 size support, quality values, reference images), output fetch, retries, usage
   - _Done when:_ 1856×2784 low-quality image generate ho aur uska cost log ho. Agar ye size support na ho toh nearest supported size + upscale plan PRD me update karo.
-- [ ] **T4.3** ⚙️ Fonts pack (~30 OFL fonts self-hosted) + `exporters/cover/compose.ts` (`@napi-rs/canvas`, normalized layers JSON → JPG; server output canonical)
+- [x] **T4.3** ⚙️ Fonts pack (~30 OFL fonts self-hosted) + `exporters/cover/compose.ts` (`@napi-rs/canvas`, normalized layers JSON → JPG; server output canonical)
   - _Done when:_ same layers JSON browser (Konva) aur server dono me render ho aur screenshot-diff tolerance ke andar ho.
 - [x] **T4.4** ⚙️ `processors/image/cover.ts`: prompt builder (series style + book scene + no-text / ai_text), reference image (part > 1), save original art (1856×2784), ebook crop 1600×2560, overlay compose, `covers` row, `is_active` switch
   - _Depends:_ T4.1, T4.2, T4.3

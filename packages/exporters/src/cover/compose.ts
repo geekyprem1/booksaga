@@ -134,9 +134,9 @@ export async function composeCover(input: ComposeInput): Promise<Buffer> {
     const maxWidth = layer.w * width;
     const lines = wrapText(ctx, text, maxWidth);
     const lineHeight = fontSize * 1.18;
-    const blockHeight = lines.length * lineHeight;
     const centerX = layer.x * width;
-    const startY = layer.y * height - blockHeight / 2 + lineHeight / 2;
+    // `y` is the TOP of the text block (the editor draws it the same way).
+    const startY = layer.y * height + lineHeight / 2;
 
     for (const [index, line] of lines.entries()) {
       const y = startY + index * lineHeight;
@@ -174,7 +174,7 @@ export function defaultLayers(input: {
       kind: 'series',
       text: input.seriesTitle,
       x: 0.5,
-      y: 0.085,
+      y: 0.07,
       w: 0.82,
       align: 'center',
       size: 0.026,
@@ -186,7 +186,7 @@ export function defaultLayers(input: {
       kind: 'title',
       text: input.title,
       x: 0.5,
-      y: 0.63,
+      y: 0.60,
       w: 0.84,
       align: 'center',
       size: 0.072,
@@ -197,7 +197,7 @@ export function defaultLayers(input: {
       kind: 'part',
       text: `Book ${input.partNumber}`,
       x: 0.5,
-      y: 0.79,
+      y: 0.78,
       w: 0.6,
       align: 'center',
       size: 0.022,
@@ -208,7 +208,7 @@ export function defaultLayers(input: {
       kind: 'author',
       text: input.author,
       x: 0.5,
-      y: 0.9,
+      y: 0.90,
       w: 0.8,
       align: 'center',
       size: 0.034,

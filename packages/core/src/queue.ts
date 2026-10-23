@@ -146,6 +146,8 @@ export interface EnqueueJobInput {
   version?: number;
   payload?: Record<string, unknown>;
   reason?: string;
+  /** Free jobs (re-compose, cleanup) skip the credit reservation entirely. */
+  skipCredits?: boolean;
 }
 
 export interface EnqueueJobResult {
@@ -208,17 +210,19 @@ export async function enqueueJob(
 
   const jobId = inserted.data.id;
 
-  let ledgerId: number;
-  try {
-    ledgerId = await reserveCredits(db, {
-      source: input.source,
-      amount: input.amount,
-      jobId,
-      reason: input.reason ?? `${input.type} (${input.action})`,
-    });
-  } catch (err) {
-    await db.from('jobs').delete().eq('id', jobId);
-    throw err instanceof AppError ? err : mapCreditError(err as { message: string });
+  let ledgerId: number | null = null;
+  if (!input.skipCredits) {
+    try {
+      ledgerId = await reserveCredits(db, {
+        source: input.source,
+        amount: input.amount,
+        jobId,
+        reason: input.reason ?? `${input.type} (${input.action})`,
+      });
+    } catch (err) {
+      await db.from('jobs').delete().eq('id', jobId);
+      throw err instanceof AppError ? err : mapCreditError(err as { message: string });
+    }
   }
 
   try {
@@ -240,7 +244,7 @@ export async function enqueueJob(
     );
   } catch (err) {
     // The job never reached the queue: give the credits back and close the row.
-    await refundCredits(db, ledgerId, 'Queue unavailable').catch(() => undefined);
+    if (ledgerId) await refundCredits(db, ledgerId, 'Queue unavailable').catch(() => undefined);
     await db
       .from('jobs')
       .update({
