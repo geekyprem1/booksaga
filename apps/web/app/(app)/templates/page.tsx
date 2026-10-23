@@ -1,3 +1,4 @@
+import { Gate } from '@/components/billing/gate';
 import { TemplateLibrary, type TemplateCard } from '@/components/templates/template-library';
 import { getAccount } from '@/lib/account';
 import { getAdminDb } from '@/lib/supabase/admin';
@@ -52,10 +53,17 @@ export default async function TemplatesPage() {
         </p>
       </header>
 
-      <TemplateLibrary
-        templates={templates}
-        fullAccess={account.entitlements.templatesTier === 'full'}
-      />
+      <Gate
+        check={{ kind: 'templates', tier: 'lite' }}
+        feature="Series Templates"
+        planCode="oto2"
+        description="Start from a proven premise instead of a blank page."
+      >
+        <TemplateLibrary
+          templates={templates}
+          fullAccess={account.entitlements.templatesTier === 'full'}
+        />
+      </Gate>
     </div>
   );
 }

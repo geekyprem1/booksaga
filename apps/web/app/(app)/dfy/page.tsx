@@ -1,3 +1,4 @@
+import { Gate } from '@/components/billing/gate';
 import { DfyLibrary, type DfyIdea, type DfyPack } from '@/components/dfy/dfy-library';
 import { getAccount } from '@/lib/account';
 import { getAdminDb } from '@/lib/supabase/admin';
@@ -53,7 +54,18 @@ export default async function DfyPage() {
         </p>
       </header>
 
-      <DfyLibrary ideas={ideas} packs={packs} fullAccess={account.entitlements.dfyPacks === 'full'} />
+      <Gate
+        check={{ kind: 'dfyPacks', tier: 'lite' }}
+        feature="Done For You"
+        planCode="oto2"
+        description="Series ideas by niche plus keyword and blurb packs."
+      >
+        <DfyLibrary
+          ideas={ideas}
+          packs={packs}
+          fullAccess={account.entitlements.dfyPacks === 'full'}
+        />
+      </Gate>
     </div>
   );
 }

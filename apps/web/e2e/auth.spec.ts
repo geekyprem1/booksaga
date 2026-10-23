@@ -74,7 +74,7 @@ test.describe('plan-aware app shell', () => {
     const nav = page.getByRole('navigation', { name: 'Main' });
     await expect(nav.getByRole('link', { name: /Series Templates/ })).not.toContainText('(locked)');
     await nav.getByRole('link', { name: /Series Templates/ }).click();
-    await expect(page.getByText('Coming soon')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Series Templates' })).toBeVisible();
   });
 
   test('non-admins get a 404 on the admin area', async ({ page }) => {

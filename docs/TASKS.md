@@ -276,17 +276,17 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
 
 ### 6.3 OTO2 — Done-For-You
 
-- [ ] **T6.5** 🗄️ Migration: `templates`, `dfy_ideas`, `dfy_packs` (bucket T1.6 me)
-- [ ] **T6.6** ⚙️🤖 `seed_templates` job + `scripts/seed-templates.ts`: 12 categories × 10, DeepSeek se template JSON, gpt-image-2 se sample cover. Idempotent (slug), progress admin pe dikhe, tier assign (40 lite)
+- [x] **T6.5** 🗄️ Migration: `templates`, `dfy_ideas`, `dfy_packs` (bucket T1.6 me)
+- [x] **T6.6** ⚙️🤖 `seed_templates` job + `scripts/seed-templates.ts`: 12 categories × 10, DeepSeek se template JSON, gpt-image-2 se sample cover. Idempotent (slug), progress admin pe dikhe, tier assign (40 lite)
   - _Done when:_ 120 templates + covers DB me hon, aur dobara run karne pe duplicates na banein.
   - _Depends:_ T6.5, T4.2
-- [ ] **T6.7** ⚙️🤖 `scripts/seed-dfy.ts`: 500+ DFY series ideas by niche, blurb templates, keyword packs by genre
+- [x] **T6.7** ⚙️🤖 `scripts/seed-dfy.ts`: 500+ DFY series ideas by niche, blurb templates, keyword packs by genre
   - _Depends:_ T6.5
-- [ ] **T6.8** 🎨 Series Templates page (PRD §8.8): hero, category tabs, search, cards (badge, cover), lite/full gating, template detail, "Use This Template" → Create Series prefill
+- [x] **T6.8** 🎨 Series Templates page (PRD §8.8): hero, category tabs, search, cards (badge, cover), lite/full gating, template detail, "Use This Template" → Create Series prefill
   - _Depends:_ T6.6, T2.17
-- [ ] **T6.9** 🎨 DFY Ideas & Packs pages (browse, copy, "Use idea" → Create Series)
+- [x] **T6.9** 🎨 DFY Ideas & Packs pages (browse, copy, "Use idea" → Create Series)
   - _Depends:_ T6.7
-- [ ] **T6.10** 🎨 Admin → Templates/DFY CRUD + seed job trigger/status
+- [x] **T6.10** 🎨 Admin → Templates/DFY CRUD + seed job trigger/status
   - _Depends:_ T6.6
 
 ### 6.4 OTO3 — Audiobook

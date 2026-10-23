@@ -20,7 +20,7 @@ export function LockedCard({
           <Lock className="size-5 text-muted-foreground" aria-hidden="true" />
         </span>
         <div>
-          <p className="text-lg font-semibold">{feature} is not in your plan</p>
+          <p className="text-lg font-semibold">{feature} is not included in your plan</p>
           <p className="mt-1 max-w-md text-sm text-muted-foreground">
             {description ?? 'Upgrade to unlock it — everything you have already generated stays.'}
           </p>
