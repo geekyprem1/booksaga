@@ -263,10 +263,46 @@ export async function processBook(
   const all = chapters ?? [];
   const total = all.length;
 
+  /**
+   * Extract a finished chapter's facts and merge them into the bible.
+   *
+   * This is the only step that overlaps with writing: chapter N+1 is written while chapter N's
+   * facts are extracted. Only one extraction is ever in flight, so merges stay strictly ordered,
+   * and the next chapter still receives the previous chapter's prose through `previousTail` — the
+   * structured facts catch up one chapter later, which is what makes the overlap safe.
+   */
+  const extractFacts = async (target: (typeof all)[number], text: string): Promise<void> => {
+    const extract = await aiFast.json({
+      ...chapterExtractPrompt(target.title, text),
+      schema: chapterExtractSchema,
+      label: 'ChapterExtract',
+      usage: { userId: data.userId, jobId: runner.jobId, purpose: 'chapter_extract' },
+    });
+
+    const current = await loadBible(db, series.id);
+    const merged = mergeBible(current, extract.data.facts, {
+      chapterNumber: target.number,
+      bookNumber: book.part_number,
+    });
+    await saveBible(db, series.id, merged.bible, merged.diff, book.id, target.id);
+
+    await db.from('chapters').update({ summary: extract.data.summary }).eq('id', target.id);
+    target.summary = extract.data.summary;
+  };
+
+  let extractInFlight: Promise<void> | null = null;
+
   for (const chapter of all) {
+    // Resumability: a chapter written before a crash has prose but no summary/facts yet.
+    if (chapter.status === 'done' && !chapter.summary) {
+      if (extractInFlight) await extractInFlight;
+      extractInFlight = extractFacts(chapter, chapter.content_text ?? '');
+      continue;
+    }
     if (chapter.status === 'done') continue;
 
     if (await runner.isCancelRequested()) {
+      if (extractInFlight) await extractInFlight;
       const done = all.filter((c) => c.status === 'done').length;
       const refund = total === 0 || done / total < 0.2;
       await runner.cancel({ refund });
@@ -329,25 +365,12 @@ export async function processBook(
     const text = tiptapToPlainText(doc);
     const words = countWords(text);
 
-    const extract = await aiFast.json({
-      ...chapterExtractPrompt(chapter.title, text),
-      schema: chapterExtractSchema,
-      label: 'ChapterExtract',
-      usage: { userId: data.userId, jobId: runner.jobId, purpose: 'chapter_extract' },
-    });
-
-    const merged = mergeBible(bible, extract.data.facts, {
-      chapterNumber: chapter.number,
-      bookNumber: book.part_number,
-    });
-    const version = await saveBible(db, series.id, merged.bible, merged.diff, book.id, chapter.id);
-
+    // Save the prose immediately so the editor shows the chapter while facts are extracted.
     await db
       .from('chapters')
       .update({
         content: asJson(doc),
         content_text: text,
-        summary: extract.data.summary,
         word_count: words,
         status: 'done',
       })
@@ -362,14 +385,21 @@ export async function processBook(
 
     chapter.status = 'done';
     chapter.word_count = words;
-    chapter.summary = extract.data.summary;
+    chapter.content_text = text;
+
+    // The previous extraction ran during this write, so this await is normally instant.
+    if (extractInFlight) await extractInFlight;
+    extractInFlight = extractFacts(chapter, text);
 
     await runner.progress(
       CHAPTER_BASE + (CHAPTER_SPAN * chapter.number) / Math.max(total, 1),
-      `Chapter ${chapter.number} of ${total} done (bible v${version})`,
+      `Chapter ${chapter.number} of ${total} written`,
       { chapterNumber: chapter.number, chaptersDone: chapter.number, chaptersTotal: total },
     );
   }
+
+  // Let the last extraction land before continuity and metadata read the bible.
+  if (extractInFlight) await extractInFlight;
 
   // -------------------------------------------------------------------------
   // 4) Continuity
