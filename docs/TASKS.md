@@ -211,9 +211,9 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
   - _Done when:_ same layers JSON browser (Konva) aur server dono me render ho aur screenshot-diff tolerance ke andar ho.
 - [x] **T4.4** ⚙️ `processors/image/cover.ts`: prompt builder (series style + book scene + no-text / ai_text), reference image (part > 1), save original art (1856×2784), ebook crop 1600×2560, overlay compose, `covers` row, `is_active` switch
   - _Depends:_ T4.1, T4.2, T4.3
-- [ ] **T4.5** ⚙️ Series Cover Style: Book 1 ka cover save hote hi `series.cover_style` lock ho, aur "Unlock style" action
+- [x] **T4.5** ⚙️ Series Cover Style: Book 1 ka cover save hote hi `series.cover_style` lock ho, aur "Unlock style" action
   - _Depends:_ T4.4
-- [ ] **T4.6** 🎨 Cover Studio (PRD §8.9): book select, Generate (2 credits), variations history, Konva editor (text layers, fonts, colors, effects, positions), AI Text Mode toggle + spelling warning, Save → server compose, Set active
+- [x] **T4.6** 🎨 Cover Studio (PRD §8.9): book select, Generate (2 credits), variations history, Konva editor (text layers, fonts, colors, effects, positions), AI Text Mode toggle + spelling warning, Save → server compose, Set active
   - _Depends:_ T4.4
 - [ ] **T4.7** 🎨 Cover sources: Library (user images + preset backgrounds), Upload (MIME sniff, 10MB, sharp re-encode)
   - _Depends:_ T4.1

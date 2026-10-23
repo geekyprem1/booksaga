@@ -1,4 +1,5 @@
 import { CoverStudio, type CoverBook } from '@/components/covers/cover-studio';
+import type { LibraryImage } from '@/components/covers/image-library';
 import type { CoverLayerData } from '@/components/covers/cover-editor';
 import { getAccount } from '@/lib/account';
 import { requireUser } from '@/lib/auth/session';
@@ -25,6 +26,21 @@ export default async function SeriesCoversPage({ params }: { params: Promise<{ i
   ]);
 
   const bookIds = (books ?? []).map((b) => b.id);
+
+  // The author's image library (T4.7).
+  const { data: imageRows } = await db
+    .from('images')
+    .select('id, path')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(24);
+
+  const images: LibraryImage[] = await Promise.all(
+    (imageRows ?? []).map(async (image) => {
+      const { data } = await db.storage.from('uploads').createSignedUrl(image.path, 3600);
+      return { id: image.id, url: data?.signedUrl ?? null };
+    }),
+  );
 
   const { data: covers } = bookIds.length
     ? await db
@@ -91,6 +107,7 @@ export default async function SeriesCoversPage({ params }: { params: Promise<{ i
       style={series.cover_style as { artPrompt?: string; palette?: string[] } | null}
       seriesTitle={series.title}
       author={series.pen_name}
+      images={images}
     />
   );
 }

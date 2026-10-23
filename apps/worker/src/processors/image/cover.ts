@@ -3,7 +3,7 @@
  *
  *   1. Direct the series once (artPrompt + palette + font) and lock it on `series.cover_style`.
  *   2. Paint this book's scene with gpt-image-2 (2:3, text-less).
- *   3. Produce the two shipping files with sharp: ebook 1600×2560 and print front 1856×2784.
+ *   3. Produce the two shipping files with sharp: ebook 1600Ãƒâ€”2560 and print front 1856Ãƒâ€”2784.
  *   4. Save a `covers` row and make it the active cover for the book.
  *
  * Text overlay (title/author) is composed separately, so the original art stays reusable.
@@ -26,6 +26,9 @@ export interface CoverJobData {
   refId: string;
   /** Regenerate an existing cover instead of creating a new one. */
   variation?: boolean;
+  /** Use an existing library image instead of generating art (T4.7). */
+  sourceImagePath?: string;
+  sourceBucket?: string;
   /** Re-render an existing cover with edited layers (no AI call, no credits). */
   recompose?: boolean;
   coverId?: string;
@@ -96,33 +99,63 @@ export async function processCover(
     await db.from('series').update({ cover_style: style }).eq('id', series.id);
   }
 
+  // A library image needs a palette/font but not an AI art direction.
+  if (!style && data.sourceImagePath) {
+    style = { artPrompt: '', palette: ['#f0e6d2'], scene: '', fontFamily: 'serif' };
+  }
+
   if (!style) throw new Error('Could not establish a cover style.');
-
-  await runner.progress(30, 'Painting the artwork');
-
-  const prompt = coverImagePrompt({
-    artPrompt: style.artPrompt,
-    palette: style.palette,
-    scene: style.scene,
-    genre: series.genre,
-    title: book.title,
-    author: series.pen_name,
-  });
-
-  const art = await ai.image({
-    prompt,
-    aspectRatio: '1024x1536',
-    usage: { userId: data.userId, jobId: runner.jobId, purpose: 'cover' },
-  });
 
   const coverId = randomUUID();
   const basePath = `${data.userId}/${series.id}/${book.id}`;
+  const sourceImagePath = data.sourceImagePath;
+  const sourceBucket = data.sourceBucket ?? 'uploads';
 
-  const artPath = `${basePath}/${coverId}.png`;
-  const artUpload = await db.storage
-    .from('cover-art')
-    .upload(artPath, art.buffer, { contentType: 'image/png', upsert: true });
-  if (artUpload.error) throw new Error(`Could not store the artwork: ${artUpload.error.message}`);
+  let artBuffer: Buffer;
+  let artPath: string;
+  let prompt: string | null = null;
+
+  if (sourceImagePath) {
+    // Library image (T4.7): no AI call, just compose the text over the author's own artwork.
+    await runner.progress(40, 'Using your image');
+    const download = await db.storage.from(sourceBucket).download(sourceImagePath);
+    if (download.error || !download.data) {
+      throw new Error(`Could not read the image: ${download.error?.message}`);
+    }
+    artBuffer = Buffer.from(await download.data.arrayBuffer());
+    const ext = sourceImagePath.split('.').pop()?.toLowerCase() ?? 'png';
+    artPath = `${basePath}/${coverId}.${ext}`;
+    const contentType =
+      ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    const copy = await db.storage
+      .from('cover-art')
+      .upload(artPath, artBuffer, { contentType, upsert: true });
+    if (copy.error) throw new Error(`Could not store the artwork: ${copy.error.message}`);
+  } else {
+    await runner.progress(30, 'Painting the artwork');
+
+    prompt = coverImagePrompt({
+      artPrompt: style.artPrompt,
+      palette: style.palette,
+      scene: style.scene,
+      genre: series.genre,
+      title: book.title,
+      author: series.pen_name,
+    });
+
+    const art = await ai.image({
+      prompt,
+      aspectRatio: '1024x1536',
+      usage: { userId: data.userId, jobId: runner.jobId, purpose: 'cover' },
+    });
+
+    artBuffer = art.buffer;
+    artPath = `${basePath}/${coverId}.png`;
+    const artUpload = await db.storage
+      .from('cover-art')
+      .upload(artPath, artBuffer, { contentType: 'image/png', upsert: true });
+    if (artUpload.error) throw new Error(`Could not store the artwork: ${artUpload.error.message}`);
+  }
 
   await runner.progress(70, 'Setting the title and author');
 
@@ -136,14 +169,14 @@ export async function processCover(
 
   const [ebook, print] = await Promise.all([
     composeCover({
-      art: art.buffer,
+      art: artBuffer,
       width: 1600,
       height: 2560,
       layers,
       fontFamily: style.fontFamily,
     }),
     composeCover({
-      art: art.buffer,
+      art: artBuffer,
       width: 1856,
       height: 2784,
       layers,
@@ -166,7 +199,7 @@ export async function processCover(
 
   await runner.progress(90, 'Saving the cover');
 
-  // Only one active cover per (book, type) — the partial unique index enforces it.
+  // Only one active cover per (book, type) Ã¢â‚¬â€ the partial unique index enforces it.
   await db.from('covers').update({ is_active: false }).eq('book_id', book.id).eq('type', 'ebook');
 
   const { data: cover, error: insertError } = await db
@@ -202,7 +235,7 @@ export async function processCover(
 }
 
 /**
- * Re-render an edited cover: same artwork, new text layout. No AI call and no credits — the layer
+ * Re-render an edited cover: same artwork, new text layout. No AI call and no credits Ã¢â‚¬â€ the layer
  * JSON was already validated and stored by the web action.
  */
 async function recomposeCover(

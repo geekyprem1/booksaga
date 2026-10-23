@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { JobProgressDialog } from '@/components/jobs/job-progress-dialog';
 import { defaultCoverLayers, type CoverLayerData } from '@/components/covers/cover-editor';
+import { ImageLibrary, type LibraryImage } from '@/components/covers/image-library';
 import {
   generateCoverAction,
   setActiveCoverAction,
@@ -48,6 +49,7 @@ export function CoverStudio({
   style,
   seriesTitle,
   author,
+  images,
 }: {
   seriesId: string;
   books: CoverBook[];
@@ -56,12 +58,14 @@ export function CoverStudio({
   style: { artPrompt?: string; palette?: string[] } | null;
   seriesTitle: string;
   author: string;
+  images: LibraryImage[];
 }) {
   const router = useRouter();
   const [job, setJob] = useState<{ jobId: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<CoverVariation | null>(null);
+  const [libraryFor, setLibraryFor] = useState<{ bookId: string; title: string } | null>(null);
 
   async function generate(bookId: string) {
     setError(null);
@@ -225,6 +229,18 @@ export function CoverStudio({
                       <Pencil aria-hidden="true" />
                     </Button>
                   ) : null}
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setLibraryFor({ bookId: book.id, title: book.title })}
+                    disabled={busy !== null || book.status === 'locked'}
+                    aria-label={`Use my image for ${book.title}`}
+                    title="Use an image from your library (free)"
+                  >
+                    <ImageIcon aria-hidden="true" />
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -248,6 +264,18 @@ export function CoverStudio({
         onSettled={() => {
           setJob(null);
           router.refresh();
+        }}
+      />
+
+      <ImageLibrary
+        open={Boolean(libraryFor)}
+        bookId={libraryFor?.bookId ?? null}
+        bookTitle={libraryFor?.title ?? ''}
+        images={images}
+        onClose={() => setLibraryFor(null)}
+        onJob={(jobId) => {
+          setLibraryFor(null);
+          setJob({ jobId });
         }}
       />
 
