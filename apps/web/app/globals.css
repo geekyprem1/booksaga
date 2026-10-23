@@ -1,0 +1,100 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/* BookSaga design tokens (PRD §8.0): dark navy surfaces + blue → violet → pink neon gradient. */
+:root {
+  --background: #0b1023;
+  --foreground: #e9ecff;
+  --card: #121937;
+  --card-foreground: #e9ecff;
+  --popover: #141b3d;
+  --popover-foreground: #e9ecff;
+  --muted: #1a2248;
+  --muted-foreground: #8f99c7;
+  --border: rgb(255 255 255 / 0.09);
+  --input: rgb(255 255 255 / 0.12);
+  --ring: #8b5cf6;
+  --primary: #8b5cf6;
+  --primary-foreground: #ffffff;
+  --accent-blue: #3b82f6;
+  --accent-pink: #ec4899;
+  --accent-amber: #f59e0b;
+  --accent-teal: #14b8a6;
+  --accent-emerald: #10b981;
+  --destructive: #f43f5e;
+  --success: #22c55e;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-blue: var(--accent-blue);
+  --color-pink: var(--accent-pink);
+  --color-amber: var(--accent-amber);
+  --color-teal: var(--accent-teal);
+  --color-emerald: var(--accent-emerald);
+  --font-sans:
+    Inter, 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    color-scheme: dark;
+  }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@utility bg-brand-gradient {
+  background-image: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 52%, #ec4899 100%);
+}
+
+@utility text-brand-gradient {
+  background-image: linear-gradient(90deg, #60a5fa 0%, #a78bfa 52%, #f472b6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility glow-primary {
+  box-shadow: 0 0 24px -4px rgb(139 92 246 / 0.55);
+}
+
+@utility app-backdrop {
+  background-image:
+    radial-gradient(60rem 30rem at 10% -10%, rgb(139 92 246 / 0.18), transparent 60%),
+    radial-gradient(50rem 28rem at 100% 0%, rgb(236 72 153 / 0.12), transparent 60%);
+}

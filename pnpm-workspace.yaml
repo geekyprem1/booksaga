@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - packages/*
+
+# pnpm blocks dependency build scripts by default; allow only what we need.
+allowBuilds:
+  esbuild: true
+  # Optional native accelerator for msgpackr (BullMQ dependency); the pure-JS path is fine.
+  msgpackr-extract: false
+  sharp: true
+  unrs-resolver: true

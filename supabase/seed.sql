@@ -1,0 +1,4 @@
+-- Local development seed. Intentionally empty:
+--  * Reference data (plans, credit_costs, app_settings) lives in migration 0004 so that
+--    `supabase db push` gives production the same data.
+--  * Create a local admin with:  pnpm create-admin --email admin@local.test
