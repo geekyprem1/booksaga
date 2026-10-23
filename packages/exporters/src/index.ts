@@ -8,3 +8,5 @@ export * from './zip';
 export * from './pdf/print';
 export * from './cover/wrap';
 export * from './epub/boxset';
+export * from './audio/clean';
+export * from './audio/master';

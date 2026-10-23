@@ -5,11 +5,6 @@ import { requireUser } from '@/lib/auth/session';
 import { loadSeries } from '@/lib/series/load';
 
 const TABS: Record<string, { title: string; milestone: string; detail: string }> = {
-  audiobook: {
-    title: 'Audiobook',
-    milestone: 'M6',
-    detail: 'ACX-ready audio per chapter, generated with a curated voice and loudness normalisation.',
-  },
 };
 
 export default async function SeriesTabPage({

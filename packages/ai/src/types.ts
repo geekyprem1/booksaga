@@ -106,3 +106,19 @@ export class AiSchemaError extends AiError {
     this.raw = raw;
   }
 }
+
+export interface SpeechRequest {
+  text: string;
+  /** Kokoro voice id, e.g. `af_heart`. */
+  voice: string;
+  speed?: number;
+  usage: UsageContext;
+}
+
+export interface SpeechResult {
+  buffer: Buffer;
+  mime: string;
+  model: string;
+  characters: number;
+  costUsd: number;
+}

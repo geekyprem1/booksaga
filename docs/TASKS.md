@@ -271,7 +271,7 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
 - [x] **T6.3** ⚙️🎨 Paperback full-wrap cover: `wrap.ts` dimensions, back cover (blurb, author, barcode zone), spine text rule (≥79 pages), PDF 300 DPI (pdf-lib), export me include. Sirf print PDF ke actual page count ke baad generate ho; page count badle toh `stale` + pre-flight warning + free regenerate
   - _Done when:_ 6×9, 200 pages, white paper ka wrap width = 0.125+6+0.4504+6+0.125 in ho, front art effective DPI ≥ 300 ho, aur book edit karke page count badalne pe wrap stale dikhe.
   - _Depends:_ T5.4, T4.3
-- [ ] **T6.4** 🗄️⚙️🎨 Box Set Builder: `box_sets` table, books select, combined EPUB (nested TOC, dividers), box set cover (2 credits), AI description, export
+- [x] **T6.4** 🗄️⚙️🎨 Box Set Builder: `box_sets` table, books select, combined EPUB (nested TOC, dividers), box set cover (2 credits), AI description, export
   - _Depends:_ T5.3, T4.4
 
 ### 6.3 OTO2 — Done-For-You

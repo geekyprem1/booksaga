@@ -149,6 +149,79 @@ export type Database = {
           },
         ]
       }
+      audiobooks: {
+        Row: {
+          book_id: string
+          chapters: Json
+          cover_path: string | null
+          created_at: string
+          error: string | null
+          id: string
+          series_id: string
+          speed: number
+          status: string
+          total_seconds: number | null
+          updated_at: string
+          user_id: string
+          voice: string
+          zip_path: string | null
+        }
+        Insert: {
+          book_id: string
+          chapters?: Json
+          cover_path?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          series_id: string
+          speed?: number
+          status?: string
+          total_seconds?: number | null
+          updated_at?: string
+          user_id: string
+          voice: string
+          zip_path?: string | null
+        }
+        Update: {
+          book_id?: string
+          chapters?: Json
+          cover_path?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          series_id?: string
+          speed?: number
+          status?: string
+          total_seconds?: number | null
+          updated_at?: string
+          user_id?: string
+          voice?: string
+          zip_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audiobooks_book_id_fkey"
+            columns: ["book_id"]
+            isOneToOne: false
+            referencedRelation: "books"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audiobooks_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "series"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audiobooks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_log: {
         Row: {
           action: string

@@ -1,5 +1,5 @@
 /**
- * The AI facade used by the worker (T2.2–T2.5, T4.2).
+ * The AI facade used by the worker (T2.2â€“T2.5, T4.2).
  *
  *   const ai = createAi({ mode, apiKey, model, db });
  *   const chapter = await ai.text({ ... });           // plain prose
@@ -13,10 +13,13 @@ import { completeJson } from './json';
 import { mockComplete } from './mock';
 import { openRouterComplete, type OpenRouterOptions } from './openrouter';
 import { mockImage, replicateImage, type ReplicateOptions } from './replicate';
+import { mockSpeech, replicateSpeech } from './speech';
 import {
   AiError,
   type AiMode,
   type ImageRequest,
+  type SpeechRequest,
+  type SpeechResult,
   type ImageResult,
   type JsonRequest,
   type JsonResult,
@@ -31,6 +34,7 @@ export { extractJson, completeJson } from './json';
 export { mockComplete } from './mock';
 export { backoffDelay, isRetryableStatus } from './openrouter';
 export { replicateImage, mockImage } from './replicate';
+export { replicateSpeech, mockSpeech } from './speech';
 
 export interface AiClient {
   readonly mode: AiMode;
@@ -38,6 +42,7 @@ export interface AiClient {
   text(req: TextRequest): Promise<TextResult>;
   json<S extends z.ZodTypeAny>(req: JsonRequest<S>): Promise<JsonResult<z.infer<S>>>;
   image(req: ImageRequest): Promise<ImageResult>;
+  speech(req: SpeechRequest): Promise<SpeechResult>;
 }
 
 export interface CreateAiOptions {
@@ -55,6 +60,10 @@ export interface CreateAiOptions {
   replicateToken?: string;
   imageModel?: string;
   imageQuality?: 'low' | 'medium' | 'high' | 'auto';
+
+  /** Replicate TTS (audiobooks). */
+  speechModel?: string;
+  speechPricePerKchar?: number;
 }
 
 export function createAi(opts: CreateAiOptions): AiClient {
@@ -129,6 +138,36 @@ export function createAi(opts: CreateAiOptions): AiClient {
           cachedInputTokens: 0,
           outputTokens: 0,
           images: 1,
+          costUsd: result.costUsd,
+        });
+      }
+      return result;
+    },
+
+    speech: async (req) => {
+      const result = replicate
+        ? await replicateSpeech(
+            {
+              token: replicate.token,
+              model: opts.speechModel ?? 'jaaari/kokoro-82m',
+              baseUrl: replicate.baseUrl,
+              timeoutMs: replicate.timeoutMs,
+              pricePerKchar: opts.speechPricePerKchar,
+            },
+            req,
+          )
+        : mockSpeech(req);
+
+      if (opts.db) {
+        await logUsage(opts.db, {
+          userId: req.usage.userId,
+          jobId: req.usage.jobId,
+          provider: replicate ? 'replicate' : 'mock',
+          model: result.model,
+          purpose: req.usage.purpose,
+          inputTokens: 0,
+          cachedInputTokens: 0,
+          outputTokens: 0,
           costUsd: result.costUsd,
         });
       }

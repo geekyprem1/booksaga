@@ -30,6 +30,7 @@ import { processCover } from './processors/image/cover';
 import { processBookExport } from './processors/export/book';
 import { processExportCleanup } from './processors/system/exportCleanup';
 import { processBoxSet } from './processors/export/boxset';
+import { processAudiobook } from './processors/audio/audiobook';
 
 interface Runtime {
   env: ServerEnv;
@@ -106,6 +107,19 @@ async function dispatch(runtime: Runtime, job: Job, runner: JobRunner): Promise<
         { db: runtime.db, ai: runtime.ai },
         runner,
         job.data as { jobId: string; userId: string; refId: string; variation?: boolean },
+      );
+    case 'audiobook':
+      return processAudiobook(
+        { db: runtime.db, ai: runtime.ai },
+        runner,
+        job.data as {
+          jobId: string;
+          userId: string;
+          refId: string;
+          audiobookId: string;
+          voice: string;
+          speed: number;
+        },
       );
     case 'box_set':
       return processBoxSet(
@@ -285,11 +299,11 @@ async function main(): Promise<void> {
   const server = startHealthServer(runtime);
 
   console.log(
-    `[worker] up Â· queues=${[...enabled].join(',')} Â· text=${concurrency.text} Â· ai_mode=${env.AI_MODE}`,
+    `[worker] up Ã‚Â· queues=${[...enabled].join(',')} Ã‚Â· text=${concurrency.text} Ã‚Â· ai_mode=${env.AI_MODE}`,
   );
 
   const shutdown = async (signal: string) => {
-    console.log(`[worker] ${signal} received, drainingâ€¦`);
+    console.log(`[worker] ${signal} received, drainingÃ¢â‚¬Â¦`);
     server.close();
     await Promise.all(runtime.workers.map((w) => w.close()));
     await closeQueues(queues);

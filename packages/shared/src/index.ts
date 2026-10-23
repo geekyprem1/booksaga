@@ -7,3 +7,4 @@ export * from './markdownToTiptap';
 export * from './plans';
 export * from './presets';
 export * from './schemas/ai';
+export * from './voices';
