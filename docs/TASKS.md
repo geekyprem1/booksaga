@@ -215,7 +215,7 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
   - _Depends:_ T4.4
 - [x] **T4.6** 🎨 Cover Studio (PRD §8.9): book select, Generate (2 credits), variations history, Konva editor (text layers, fonts, colors, effects, positions), AI Text Mode toggle + spelling warning, Save → server compose, Set active
   - _Depends:_ T4.4
-- [ ] **T4.7** 🎨 Cover sources: Library (user images + preset backgrounds), Upload (MIME sniff, 10MB, sharp re-encode)
+- [x] **T4.7** 🎨 Cover sources: Library (user images + preset backgrounds), Upload (MIME sniff, 10MB, sharp re-encode)
   - _Depends:_ T4.1
 - [x] **T4.8** ⚙️ Auto-Generate Covers toggle: book generate hone ke baad cover job enqueue ho (agar balance ho; warna notification)
   - _Depends:_ T4.4, T2.15
