@@ -28,6 +28,7 @@ import { processMetadata } from './processors/text/metadata';
 import { processTrashPurge } from './processors/system/trashPurge';
 import { processCover } from './processors/image/cover';
 import { processBookExport } from './processors/export/book';
+import { processExportCleanup } from './processors/system/exportCleanup';
 
 interface Runtime {
   env: ServerEnv;
@@ -105,6 +106,8 @@ async function dispatch(runtime: Runtime, job: Job, runner: JobRunner): Promise<
         runner,
         job.data as { jobId: string; userId: string; refId: string; variation?: boolean },
       );
+    case 'export_cleanup':
+      return processExportCleanup({ db: runtime.db }, runner);
     case 'trash_purge':
       return processTrashPurge({ db: runtime.db }, runner);
     default:
@@ -237,6 +240,19 @@ async function main(): Promise<void> {
       },
     )
     .catch((err) => console.error('[worker] could not register the reaper:', err));
+
+  // Export cleanup: files past their 30-day window (T5.8).
+  await queues.system
+    .upsertJobScheduler(
+      'export-cleanup',
+      { every: 24 * 60 * 60 * 1000 },
+      {
+        name: 'export_cleanup',
+        data: {},
+        opts: { removeOnComplete: true, removeOnFail: true },
+      },
+    )
+    .catch((err) => console.error('[worker] could not register export cleanup:', err));
 
   // Trash purge: series deleted more than 30 days ago (T3.3).
   await queues.system

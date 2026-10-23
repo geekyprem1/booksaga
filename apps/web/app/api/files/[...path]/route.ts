@@ -4,15 +4,30 @@ import { getAdminDb } from '@/lib/supabase/admin';
 /**
  * Signed-URL gateway for private files (T5.9).
  *
- *   /api/files/exports/<userId>/<bookId>/<exportId>.zip
+ *   /api/files/exports/<userId>/<bookId>/<exportId>.zip          -> 302 to a 5-minute signed URL
+ *   /api/files/exports/<userId>/<bookId>/<exportId>.zip?stream=1 -> proxied bytes (for pdf.js)
  *
  * The first path segment after the bucket must be the caller's own user id (every upload uses that
  * layout), so a user can never read another account's files. Admins may read anything.
  */
 const BUCKETS = new Set(['exports', 'covers', 'cover-art', 'uploads', 'audio']);
 
+const CONTENT_TYPES: Record<string, string> = {
+  pdf: 'application/pdf',
+  epub: 'application/epub+zip',
+  zip: 'application/zip',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  txt: 'text/plain; charset=utf-8',
+  csv: 'text/csv; charset=utf-8',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  mp3: 'audio/mpeg',
+};
+
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ path: string[] }> },
 ) {
   const user = await getSessionUser();
@@ -31,10 +46,23 @@ export async function GET(
     return new Response('Not found', { status: 404 });
   }
 
-  const { data, error } = await getAdminDb()
-    .storage.from(bucket)
-    .createSignedUrl(objectPath, 300);
+  const db = getAdminDb();
+  const stream = new URL(request.url).searchParams.get('stream') === '1';
 
+  if (stream) {
+    const download = await db.storage.from(bucket).download(objectPath);
+    if (download.error || !download.data) return new Response('Not found', { status: 404 });
+
+    const extension = objectPath.split('.').pop()?.toLowerCase() ?? '';
+    return new Response(await download.data.arrayBuffer(), {
+      headers: {
+        'content-type': CONTENT_TYPES[extension] ?? 'application/octet-stream',
+        'cache-control': 'private, max-age=60',
+      },
+    });
+  }
+
+  const { data, error } = await db.storage.from(bucket).createSignedUrl(objectPath, 300);
   if (error || !data?.signedUrl) return new Response('Not found', { status: 404 });
 
   return Response.redirect(data.signedUrl, 302);

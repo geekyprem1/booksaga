@@ -18,7 +18,12 @@ const securityHeaders = [
 const config: NextConfig = {
   output: 'standalone',
   // Workspace packages ship TypeScript source.
-  transpilePackages: ['@booksaga/shared', '@booksaga/db-types', '@booksaga/core'],
+  transpilePackages: [
+    '@booksaga/shared',
+    '@booksaga/db-types',
+    '@booksaga/core',
+    '@booksaga/exporters',
+  ],
   poweredByHeader: false,
   reactStrictMode: true,
   async headers() {

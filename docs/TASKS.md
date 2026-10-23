@@ -235,7 +235,7 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
 - [x] **T5.3** ⚙️ EPUB3 exporter (ARCH §8) + epubcheck test
   - _Done when:_ sample book ka EPUB epubcheck pe 0 errors de, aur Kindle Previewer/Calibre me khule.
   - _Depends:_ T2.14, T5.2
-- [ ] **T5.4** ⚙️ Print PDF exporter: Paged.js templates per trim size (5×8, 5.25×8, 5.5×8.5, 6×9), mirrored margins by page count, bleed, running headers, page numbers, recto chapter starts, embedded fonts. Playwright render
+- [x] **T5.4** ⚙️ Print PDF exporter: Paged.js templates per trim size (5×8, 5.25×8, 5.5×8.5, 6×9), mirrored margins by page count, bleed, running headers, page numbers, recto chapter starts, embedded fonts. Playwright render
   - _Done when:_ PDF page size trim (+bleed) ke barabar ho, margins spec match karein (automated check), aur actual page count save ho.
   - _Depends:_ T2.14, T5.2
 - [x] **T5.5** ⚙️ DOCX exporter (headings, page breaks, TOC field, front matter)

@@ -196,6 +196,13 @@ export async function processBookExport(
 
     pdfPages = rendered.pages;
     files.push({ name: `${slug}-print.pdf`, buffer: rendered.buffer });
+
+    // Keep the PDF on its own too: the KDP preview streams it into pdf.js (T5.11).
+    const pdfPath = `${basePath}-print.pdf`;
+    const pdfUpload = await db.storage
+      .from('exports')
+      .upload(pdfPath, rendered.buffer, { contentType: 'application/pdf', upsert: true });
+    if (!pdfUpload.error) uploaded.pdf = pdfPath;
   }
 
   if (formats.includes('docx')) {

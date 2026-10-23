@@ -6,7 +6,10 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./html": "./src/html/render.ts",
+    "./matter": "./src/book/matter.ts",
+    "./print": "./src/pdf/print.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

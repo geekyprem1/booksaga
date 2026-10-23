@@ -22,7 +22,7 @@ export function titlePage(input: MatterInput): string {
   <p class="series-name">${escapeHtml(input.seriesTitle)}</p>
   <h1 class="book-title">${escapeHtml(input.bookTitle)}</h1>
   ${input.subtitle ? `<p class="book-subtitle">${escapeHtml(input.subtitle)}</p>` : ''}
-  <p class="book-part">Book ${input.partNumber}</p>
+  ${/book\s*\d/i.test(input.subtitle ?? '') ? '' : `<p class="book-part">Book ${input.partNumber}</p>`}
   <p class="author">${escapeHtml(input.author)}</p>
 </section>`;
 }
