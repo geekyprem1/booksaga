@@ -177,3 +177,34 @@ export function assertCan(ent: Entitlements, check: CapabilityCheck): void {
       return;
   }
 }
+
+/**
+ * Non-throwing capability check for UI gating (`<Gate>`). Server actions still call `assertCan` so
+ * a direct call cannot bypass the UI.
+ */
+export function can(ent: Entitlements, check: CapabilityCheck): boolean {
+  switch (check.kind) {
+    case 'createSeries':
+      return ent.maxSeries !== 0 && (ent.maxSeries === null || check.activeSeriesCount < ent.maxSeries);
+    case 'addBook':
+      return check.booksInSeries < ent.maxBooksPerSeries;
+    case 'generateBook':
+      return ent.lengthPresets.includes(check.lengthPreset);
+    case 'paperbackWrap':
+      return ent.paperbackWrap;
+    case 'boxSet':
+      return ent.boxSets;
+    case 'templates':
+      return TIER_RANK[ent.templatesTier] >= TIER_RANK[check.tier];
+    case 'dfyPacks':
+      return TIER_RANK[ent.dfyPacks] >= TIER_RANK[check.tier];
+    case 'audiobook':
+      return ent.audiobook;
+    case 'agency':
+      return ent.maxClients !== 0 && check.clientCount < ent.maxClients;
+    case 'reseller':
+      return ent.maxResellLicenses !== 0 && check.licenseCount < ent.maxResellLicenses;
+    case 'franchiseKit':
+      return ent.franchiseKit;
+  }
+}

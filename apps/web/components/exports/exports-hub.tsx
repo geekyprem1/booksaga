@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Download, FileArchive, Loader2 } from 'lucide-react';
 import { Badge, Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,21 +27,24 @@ export interface ExportRow {
   expiresAt: string | null;
 }
 
-type Format = 'epub' | 'pdf' | 'docx' | 'metadata';
+type Format = 'epub' | 'pdf' | 'docx' | 'metadata' | 'wrap';
 
 const FORMAT_LABELS: Record<Format, string> = {
   epub: 'EPUB',
   pdf: 'Print PDF',
   docx: 'DOCX',
   metadata: 'Metadata',
+  wrap: 'Paperback wrap',
 };
 
 export function ExportsHub({
   books,
   exports,
+  canWrap,
 }: {
   books: ExportBook[];
   exports: ExportRow[];
+  canWrap: boolean;
 }) {
   const router = useRouter();
   const [job, setJob] = useState<{ jobId: string } | null>(null);
@@ -49,15 +53,24 @@ export function ExportsHub({
   const [selectedFormats, setSelectedFormats] = useState<Record<string, Format[]>>({});
 
   function formatsFor(bookId: string): Format[] {
-    return selectedFormats[bookId] ?? ['epub', 'pdf', 'docx', 'metadata'];
+    return selectedFormats[bookId] ?? ['epub', 'pdf', 'docx', 'metadata', 'wrap'];
   }
 
   function toggle(bookId: string, format: Format) {
     setSelectedFormats((current) => {
-      const active = current[bookId] ?? ['epub', 'pdf', 'docx', 'metadata'];
-      const next = active.includes(format)
+      const active = current[bookId] ?? ['epub', 'pdf', 'docx', 'metadata', 'wrap'];
+      let next = active.includes(format)
         ? active.filter((item) => item !== format)
         : [...active, format];
+
+      // The wrap is sized from the print PDF, so the two travel together.
+      if (format === 'wrap' && next.includes('wrap') && !next.includes('pdf')) {
+        next = [...next, 'pdf'];
+      }
+      if (format === 'pdf' && !next.includes('pdf')) {
+        next = next.filter((item) => item !== 'wrap');
+      }
+
       return { ...current, [bookId]: next };
     });
   }
@@ -107,26 +120,44 @@ export function ExportsHub({
               </div>
 
               <div className="flex flex-wrap gap-1">
-                {(['epub', 'pdf', 'docx', 'metadata'] as Format[]).map((format) => {
+                {(['epub', 'pdf', 'docx', 'metadata', 'wrap'] as Format[]).map((format) => {
+                  const locked = format === 'wrap' && !canWrap;
                   const active = formatsFor(book.id).includes(format);
                   return (
                     <button
                       key={format}
                       type="button"
-                      onClick={() => toggle(book.id, format)}
+                      onClick={() => (locked ? undefined : toggle(book.id, format))}
                       aria-pressed={active}
+                      aria-disabled={locked}
+                      title={
+                        locked
+                          ? 'Paperback wrap is part of the Unlimited upgrade'
+                          : format === 'wrap'
+                            ? 'Needs the print PDF (page count)'
+                            : undefined
+                      }
                       className={cn(
                         'rounded-full border px-2.5 py-1 text-xs',
-                        active
-                          ? 'border-primary bg-primary/20 text-violet-100'
-                          : 'border-border text-muted-foreground',
+                        locked
+                          ? 'cursor-not-allowed border-border/60 text-muted-foreground/50 line-through'
+                          : active
+                            ? 'border-primary bg-primary/20 text-violet-100'
+                            : 'border-border text-muted-foreground',
                       )}
                     >
                       {FORMAT_LABELS[format]}
+                      {locked ? ' ðŸ”’' : ''}
                     </button>
                   );
                 })}
               </div>
+
+              {!canWrap ? (
+                <Link href="/upgrade/oto1" className="text-[11px] text-violet-300 hover:underline">
+                  Paperback wrap is included in Unlimited →
+                </Link>
+              ) : null}
 
               <Button
                 type="button"
@@ -139,7 +170,7 @@ export function ExportsHub({
                 ) : (
                   <FileArchive aria-hidden="true" />
                 )}
-                {book.status === 'generated' ? 'Export · free' : 'Write this part first'}
+                {book.status === 'generated' ? 'Export Ã‚Â· free' : 'Write this part first'}
               </Button>
             </CardContent>
           </Card>
@@ -162,13 +193,13 @@ export function ExportsHub({
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{row.bookTitle}</p>
                     <p className="text-xs text-muted-foreground">
-                      {row.formats.join(' · ')} ·{' '}
+                      {row.formats.join(' Ã‚Â· ')} Ã‚Â·{' '}
                       {new Date(row.createdAt).toLocaleString(undefined, {
                         dateStyle: 'medium',
                         timeStyle: 'short',
                       })}
                       {row.expiresAt
-                        ? ` · expires ${new Date(row.expiresAt).toLocaleDateString()}`
+                        ? ` Ã‚Â· expires ${new Date(row.expiresAt).toLocaleDateString()}`
                         : ''}
                     </p>
                   </div>

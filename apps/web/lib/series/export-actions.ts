@@ -2,8 +2,9 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { AppError } from '@booksaga/shared';
+import { AppError, assertCan } from '@booksaga/shared';
 import { enqueueJob } from '@booksaga/core';
+import { getAccount } from '@/lib/account';
 import { requireUser } from '@/lib/auth/session';
 import { getQueues } from '@/lib/queue';
 import { getAdminDb } from '@/lib/supabase/admin';
@@ -11,10 +12,10 @@ import { runAction, type ActionResult } from '@/lib/actions';
 
 const input = z.object({
   bookId: z.string().uuid(),
-  formats: z.array(z.enum(['epub', 'pdf', 'docx', 'metadata'])).min(1).max(4),
+  formats: z.array(z.enum(['epub', 'pdf', 'docx', 'metadata', 'wrap'])).min(1).max(5),
 });
 
-/** Export a book (T5.7). Re-exports are free — no AI work happens. */
+/** Export a book (T5.7). Re-exports are free â€” no AI work happens. */
 export async function exportBookAction(
   raw: z.infer<typeof input>,
 ): Promise<ActionResult<{ jobId: string }>> {
@@ -38,6 +39,14 @@ export async function exportBookAction(
     if (!series || series.user_id !== user.id) {
       throw new AppError('FORBIDDEN', 'This book is not yours.');
     }
+    if (formats.includes('wrap')) {
+      const { account } = await getAccount();
+      assertCan(account.entitlements, { kind: 'paperbackWrap' });
+      if (!formats.includes('pdf')) {
+        throw new AppError('VALIDATION', 'The paperback wrap needs the print PDF (page count).');
+      }
+    }
+
     if (book.status !== 'generated') {
       throw new AppError('VALIDATION', 'Write this part before exporting it.');
     }

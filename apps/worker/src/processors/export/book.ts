@@ -14,19 +14,21 @@ import {
   buildMetadataCsv,
   buildMetadataTxt,
   buildPrintHtml,
+  buildWrapPdf,
   buildZip,
   chapterHtml,
   frontMatter,
   printGeometry,
   TRIM_INCHES,
   type ExportChapter,
+  type PaperStock,
   type MatterInput,
   type TrimSize,
 } from '@booksaga/exporters';
 import type { JobRunner } from '../../lib/jobs';
 import { renderPdf } from '../../lib/pdf';
 
-export type ExportFormat = 'epub' | 'pdf' | 'docx' | 'metadata';
+export type ExportFormat = 'epub' | 'pdf' | 'docx' | 'metadata' | 'wrap';
 
 export interface BookExportJobData {
   jobId: string;
@@ -118,7 +120,7 @@ export async function processBookExport(
   let cover: { buffer: Buffer; mime: string } | null = null;
   const { data: activeCover } = await db
     .from('covers')
-    .select('final_path')
+    .select('final_path, layers')
     .eq('book_id', book.id)
     .eq('type', 'ebook')
     .eq('is_active', true)
@@ -128,6 +130,20 @@ export async function processBookExport(
     const download = await db.storage.from('covers').download(activeCover.final_path);
     if (!download.error && download.data) {
       cover = { buffer: Buffer.from(await download.data.arrayBuffer()), mime: 'image/jpeg' };
+    }
+  }
+
+  // The wrap needs the larger print art (1856Ã—2784) to stay above 300 DPI across 6.125in.
+  let printArt: { buffer: Buffer; width: number; height: number } | null = null;
+  const printPath = (activeCover?.layers as { print?: { path?: string } } | null)?.print?.path;
+  if (printPath) {
+    const download = await db.storage.from('covers').download(printPath);
+    if (!download.error && download.data) {
+      printArt = {
+        buffer: Buffer.from(await download.data.arrayBuffer()),
+        width: 1856,
+        height: 2784,
+      };
     }
   }
 
@@ -205,6 +221,38 @@ export async function processBookExport(
     if (!pdfUpload.error) uploaded.pdf = pdfPath;
   }
 
+  if (formats.includes('wrap')) {
+    await runner.progress(78, 'Building the paperback wrap');
+    if (!pdfPages) throw new Error('The wrap needs the print PDF page count.');
+    if (!printArt) throw new Error('This book has no print cover yet â€” generate a cover first.');
+
+    const wrapSettings = (series.settings ?? {}) as { trim?: TrimSize; paper?: PaperStock };
+    const wrapTrim: TrimSize =
+      wrapSettings.trim && wrapSettings.trim in TRIM_INCHES ? wrapSettings.trim : '6x9';
+
+    const wrap = await buildWrapPdf({
+      trim: wrapTrim,
+      pageCount: pdfPages,
+      paper: wrapSettings.paper ?? 'white',
+      title,
+      author: matter.author,
+      blurb: matter.metadata?.blurb,
+      frontArt: printArt,
+    });
+
+    const wrapPath = `${basePath}-wrap.pdf`;
+    const wrapUpload = await db.storage
+      .from('exports')
+      .upload(wrapPath, wrap.buffer, { contentType: 'application/pdf', upsert: true });
+    if (wrapUpload.error) throw new Error(`Could not store the wrap: ${wrapUpload.error.message}`);
+
+    files.push({ name: `${slug}-wrap.pdf`, buffer: wrap.buffer });
+    uploaded.wrap = wrapPath;
+    uploaded.wrapPages = String(pdfPages);
+    uploaded.wrapWidth = String(wrap.dimensions.width);
+    uploaded.wrapDpi = String(wrap.frontDpi);
+  }
+
   if (formats.includes('docx')) {
     await runner.progress(55, 'Building the DOCX');
     const docx = await buildDocx({
@@ -274,7 +322,7 @@ export async function processBookExport(
   await runner.progress(98, 'Done');
   await runner.complete({
     title: 'Your files are ready',
-    body: `${title} — ${formats.join(', ')}. The download link works for ${EXPIRY_DAYS} days.`,
+    body: `${title} â€” ${formats.join(', ')}. The download link works for ${EXPIRY_DAYS} days.`,
     link: `/series/${series.id}/exports`,
     type: 'export_ready',
   });

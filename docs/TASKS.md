@@ -243,15 +243,15 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
 - [x] **T5.6** ⚙️ Metadata TXT + CSV (AI disclosure note ke saath)
 - [x] **T5.7** ⚙️ `processors/export/book.ts` + `series.ts`: formats select, ZIP (archiver stream), upload, `exports` row, 30-day expiry, notification. Re-export free (0 credits)
   - _Depends:_ T5.3–T5.6
-- [ ] **T5.8** ⚙️ Export cleanup cron (expired files delete)
+- [x] **T5.8** ⚙️ Export cleanup cron (expired files delete)
   - _Depends:_ T5.7
 - [x] **T5.9** ⚙️ `/api/files/[...path]`: ownership check → 5-min signed URL redirect
   - _Depends:_ T5.1
 - [x] **T5.10** 🎨 KDP Publishing (Exports hub): per-book/series export, history, downloads, status
   - _Depends:_ T5.7
-- [ ] **T5.11** 🎨 KDP Preview (PRD §8.10): pdf.js viewer (thumbnails, page X/N, zoom, fit, download), Ebook preview mode (HTML), Pre-flight checks panel
+- [x] **T5.11** 🎨 KDP Preview (PRD §8.10): pdf.js viewer (thumbnails, page X/N, zoom, fit, download), Ebook preview mode (HTML), Pre-flight checks panel
   - _Depends:_ T5.4
-- [ ] **T5.12** 🎨 KDP Upload Guide page (ebook, paperback, series linking, KDP Select/KU, AI disclosure, Read Next link replace karna)
+- [x] **T5.12** 🎨 KDP Upload Guide page (ebook, paperback, series linking, KDP Select/KU, AI disclosure, Read Next link replace karna)
 
 **Exit check M5:** Ek generated book ka ZIP download ho, jisme valid EPUB, sahi trim size wala PDF, DOCX, cover JPG aur metadata ho. Preview me PDF dikhe aur pre-flight warnings sahi hon.
 

@@ -1,5 +1,6 @@
 import { ExportsHub, type ExportBook, type ExportRow } from '@/components/exports/exports-hub';
 import { requireUser } from '@/lib/auth/session';
+import { getAccount } from '@/lib/account';
 import { loadSeries } from '@/lib/series/load';
 import { getAdminDb } from '@/lib/supabase/admin';
 
@@ -65,5 +66,13 @@ export default async function SeriesExportsPage({ params }: { params: Promise<{ 
     coverUrl: coverUrls.get(book.id) ?? null,
   }));
 
-  return <ExportsHub books={exportBooks} exports={rows} />;
+  const { account } = await getAccount();
+
+  return (
+    <ExportsHub
+      books={exportBooks}
+      exports={rows}
+      canWrap={account.entitlements.paperbackWrap}
+    />
+  );
 }

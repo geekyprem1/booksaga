@@ -6,3 +6,4 @@ export * from './docx/build';
 export * from './metadata/build';
 export * from './zip';
 export * from './pdf/print';
+export * from './cover/wrap';

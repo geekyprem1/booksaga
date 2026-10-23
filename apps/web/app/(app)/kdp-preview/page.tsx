@@ -94,6 +94,8 @@ export default async function KdpPreviewPage({
   const pdfPath = files.pdf ?? null;
   const zipPath = files.zip ?? null;
   const pageCount = files.pdfPages ? Number(files.pdfPages) : null;
+  const wrapPages = files.wrapPages ? Number(files.wrapPages) : null;
+  const wrapStale = wrapPages !== null && pageCount !== null && wrapPages !== pageCount;
 
   const metadataRow = (book.metadata ?? {}) as {
     blurb?: string;
@@ -189,6 +191,16 @@ export default async function KdpPreviewPage({
       detail: metadataRow.readNext?.includes('{{NEXT_BOOK_URL}}')
         ? 'Replace {{NEXT_BOOK_URL}} with the real Amazon link before uploading.'
         : 'No unresolved placeholder.',
+    },
+    {
+      id: 'wrap',
+      label: 'Paperback wrap',
+      status: files.wrap ? (wrapStale ? 'warn' : 'pass') : 'warn',
+      detail: files.wrap
+        ? wrapStale
+          ? `Wrap was built for ${wrapPages} pages but the book is now ${pageCount}. Regenerate it (free).`
+          : `Wrap ${files.wrapWidth ?? '?'}in wide, front art ${files.wrapDpi ?? '?'} DPI.`
+        : 'Not exported. Add the paperback wrap when you export.',
     },
     {
       id: 'chapters',
