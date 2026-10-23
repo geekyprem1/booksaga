@@ -5,11 +5,6 @@ import { requireUser } from '@/lib/auth/session';
 import { loadSeries } from '@/lib/series/load';
 
 const TABS: Record<string, { title: string; milestone: string; detail: string }> = {
-  'box-set': {
-    title: 'Box Set',
-    milestone: 'M6',
-    detail: 'Bundle the series into one EPUB with a nested table of contents and a box set cover.',
-  },
   audiobook: {
     title: 'Audiobook',
     milestone: 'M6',

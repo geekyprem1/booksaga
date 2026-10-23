@@ -89,8 +89,17 @@ export function chapterHtml(chapter: ExportChapter, opts: { heading?: boolean } 
   const heading =
     opts.heading === false
       ? ''
-      : `<h1 class="chapter-title"><span class="chapter-number">Chapter ${chapter.number}</span>${escapeHtml(chapter.title)}</h1>`;
+      : `<h1 class="chapter-title"><span class="chapter-number">Chapter ${chapter.number}</span>${escapeHtml(displayTitle(chapter.title))}</h1>`;
   return `<section class="chapter" id="ch-${chapter.number}">\n${heading}\n${tiptapToHtml(chapter.doc)}\n</section>`;
 }
 
 export { escapeHtml };
+
+/**
+ * Chapter titles often already read "Chapter 3: The Iron Chorus". Strip the prefix so exporters can
+ * add their own numbering without producing "Chapter 3: Chapter 3: ...".
+ */
+export function displayTitle(title: string): string {
+  const cleaned = title.replace(/^\s*chapter\s*\d+\s*[:.\-\u2013\u2014]\s*/i, '').trim();
+  return cleaned || title;
+}

@@ -218,3 +218,8 @@ export const coverBriefSchema = z.object({
   fontFamily: z.enum(['serif', 'sans', 'display']).default('serif'),
 });
 export type CoverBrief = z.infer<typeof coverBriefSchema>;
+/** Box set sales description (T6.4). */
+export const boxSetDescriptionSchema = z.object({
+  description: z.string().min(20).max(1200),
+});
+export type BoxSetDescription = z.infer<typeof boxSetDescriptionSchema>;

@@ -261,14 +261,14 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
 
 ### 6.1 Gating
 
-- [ ] **T6.1** 🎨 `<Gate>`, LockedCard, UpgradeCTA, `/upgrade/[planCode]` (admin settings ke external OTO URL pe redirect). Server-side `assertCan` har OTO action pe
+- [x] **T6.1** 🎨 `<Gate>`, LockedCard, UpgradeCTA, `/upgrade/[planCode]` (admin settings ke external OTO URL pe redirect). Server-side `assertCan` har OTO action pe
   - _Depends:_ T1.12
 
 ### 6.2 OTO1 — Unlimited
 
-- [ ] **T6.2** ⚙️ Full-length preset unlock (FE pe server-side reject)
+- [x] **T6.2** ⚙️ Full-length preset unlock (FE pe server-side reject)
   - _Depends:_ T6.1, T2.15
-- [ ] **T6.3** ⚙️🎨 Paperback full-wrap cover: `wrap.ts` dimensions, back cover (blurb, author, barcode zone), spine text rule (≥79 pages), PDF 300 DPI (pdf-lib), export me include. Sirf print PDF ke actual page count ke baad generate ho; page count badle toh `stale` + pre-flight warning + free regenerate
+- [x] **T6.3** ⚙️🎨 Paperback full-wrap cover: `wrap.ts` dimensions, back cover (blurb, author, barcode zone), spine text rule (≥79 pages), PDF 300 DPI (pdf-lib), export me include. Sirf print PDF ke actual page count ke baad generate ho; page count badle toh `stale` + pre-flight warning + free regenerate
   - _Done when:_ 6×9, 200 pages, white paper ka wrap width = 0.125+6+0.4504+6+0.125 in ho, front art effective DPI ≥ 300 ho, aur book edit karke page count badalne pe wrap stale dikhe.
   - _Depends:_ T5.4, T4.3
 - [ ] **T6.4** 🗄️⚙️🎨 Box Set Builder: `box_sets` table, books select, combined EPUB (nested TOC, dividers), box set cover (2 credits), AI description, export

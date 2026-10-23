@@ -307,6 +307,66 @@ export type Database = {
           },
         ]
       }
+      box_sets: {
+        Row: {
+          book_ids: string[]
+          cover_path: string | null
+          created_at: string
+          description: string | null
+          epub_path: string | null
+          error: string | null
+          id: string
+          series_id: string
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          book_ids?: string[]
+          cover_path?: string | null
+          created_at?: string
+          description?: string | null
+          epub_path?: string | null
+          error?: string | null
+          id?: string
+          series_id: string
+          status?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          book_ids?: string[]
+          cover_path?: string | null
+          created_at?: string
+          description?: string | null
+          epub_path?: string | null
+          error?: string | null
+          id?: string
+          series_id?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "box_sets_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "series"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "box_sets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chapter_versions: {
         Row: {
           chapter_id: string
