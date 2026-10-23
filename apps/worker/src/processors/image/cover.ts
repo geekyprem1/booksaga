@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { coverBriefSchema, type Bible, type CoverBrief } from '@booksaga/shared';
 import type { AiClient } from '@booksaga/ai';
 import { composeCover, defaultLayers, type CoverLayer } from '@booksaga/exporters';
+import sharp from 'sharp';
 import type { Database, DbClient } from '@booksaga/core';
 
 type JsonColumn = Database['public']['Tables']['covers']['Insert']['layers'];
@@ -26,6 +27,8 @@ export interface CoverJobData {
   refId: string;
   /** Regenerate an existing cover instead of creating a new one. */
   variation?: boolean;
+  /** 'ai' lets the model letter the cover; 'overlay' (default) composes our own type. */
+  textMode?: 'overlay' | 'ai';
   /** Use an existing library image instead of generating art (T4.7). */
   sourceImagePath?: string;
   sourceBucket?: string;
@@ -141,6 +144,7 @@ export async function processCover(
       genre: series.genre,
       title: book.title,
       author: series.pen_name,
+      textMode: data.textMode ?? 'overlay',
     });
 
     const art = await ai.image({
@@ -167,22 +171,30 @@ export async function processCover(
     palette: style.palette,
   });
 
-  const [ebook, print] = await Promise.all([
-    composeCover({
-      art: artBuffer,
-      width: 1600,
-      height: 2560,
-      layers,
-      fontFamily: style.fontFamily,
-    }),
-    composeCover({
-      art: artBuffer,
-      width: 1856,
-      height: 2784,
-      layers,
-      fontFamily: style.fontFamily,
-    }),
-  ]);
+  // AI text mode: the model lettered the cover itself, so only resize — compositing our own type
+  // on top would double it.
+  const [ebook, print] =
+    data.textMode === 'ai'
+      ? await Promise.all([
+          sharp(artBuffer).resize(1600, 2560, { fit: 'cover', position: 'centre' }).jpeg({ quality: 92 }).toBuffer(),
+          sharp(artBuffer).resize(1856, 2784, { fit: 'cover', position: 'centre' }).jpeg({ quality: 92 }).toBuffer(),
+        ])
+      : await Promise.all([
+          composeCover({
+            art: artBuffer,
+            width: 1600,
+            height: 2560,
+            layers,
+            fontFamily: style.fontFamily,
+          }),
+          composeCover({
+            art: artBuffer,
+            width: 1856,
+            height: 2784,
+            layers,
+            fontFamily: style.fontFamily,
+          }),
+        ]);
 
   const ebookPath = `${basePath}/ebook-${coverId}.jpg`;
   const printPath = `${basePath}/print-${coverId}.jpg`;
@@ -214,6 +226,7 @@ export async function processCover(
       is_active: true,
       layers: asJson({
         version: 1,
+        textMode: data.textMode ?? 'overlay',
         width: 1600,
         height: 2560,
         fontFamily: style.fontFamily,

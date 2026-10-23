@@ -10,7 +10,10 @@ import { getQueues } from '@/lib/queue';
 import { getAdminDb } from '@/lib/supabase/admin';
 import { runAction, type ActionResult } from '@/lib/actions';
 
-const input = z.object({ bookId: z.string().uuid() });
+const input = z.object({
+  bookId: z.string().uuid(),
+  textMode: z.enum(['overlay', 'ai']).optional(),
+});
 
 /** Generate (or regenerate) a cover — 2 credits, one image per call (T4.6). */
 export async function generateCoverAction(
@@ -18,7 +21,7 @@ export async function generateCoverAction(
 ): Promise<ActionResult<{ jobId: string }>> {
   return runAction(async () => {
     const user = await requireUser();
-    const { bookId } = input.parse(raw);
+    const { bookId, textMode } = input.parse(raw);
     const db = getAdminDb();
 
     const { data: book } = await db
@@ -50,7 +53,7 @@ export async function generateCoverAction(
       // A fresh key per click: without it the second variation deduplicates onto the first job
       // and the UI just reopens an already-finished job.
       version: Math.floor(Date.now() / 1000),
-      payload: { variation: true },
+      payload: { variation: true, textMode: textMode ?? 'overlay' },
       reason: 'Cover generation',
     });
 

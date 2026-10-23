@@ -68,7 +68,28 @@ export function coverImagePrompt(input: {
   genre: string;
   title: string;
   author: string;
+  /**
+   * `overlay` (default) keeps the artwork text-free and our compose engine sets the type.
+   * `ai` asks the model to letter the cover itself — looks "finished" straight away, but models
+   * routinely misspell long titles, so it is opt-in.
+   */
+  textMode?: 'overlay' | 'ai';
 }): string {
+  if (input.textMode === 'ai') {
+    return [
+      input.scene,
+      '',
+      input.artPrompt,
+      '',
+      `Colour palette: ${input.palette.join(', ')}.`,
+      `Genre: ${input.genre}.`,
+      'A finished, professional Amazon KDP book cover, portrait 2:3, cinematic lighting, rich texture.',
+      `Set the title exactly as: "${input.title}" — spelled letter for letter, large and legible, centred in the lower half.`,
+      `Set the author name exactly as: "${input.author}" — small caps, centred near the bottom edge.`,
+      'Typography must be crisp, high-contrast and correctly spelled. No other words, no logos, no watermarks, no borders.',
+    ].join('\n');
+  }
+
   return [
     input.scene,
     '',

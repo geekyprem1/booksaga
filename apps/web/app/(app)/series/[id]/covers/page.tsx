@@ -88,6 +88,8 @@ export default async function SeriesCoversPage({ params }: { params: Promise<{ i
         artUrl: artSigned.get(cover.id) ?? null,
         layers:
           ((cover.layers as { items?: unknown } | null)?.items as CoverLayerData[] | undefined) ?? [],
+        textMode:
+          ((cover.layers as { textMode?: 'overlay' | 'ai' } | null)?.textMode ?? 'overlay'),
         fontFamily:
           ((cover.layers as { fontFamily?: 'serif' | 'sans' | 'display' } | null)?.fontFamily ??
             'serif'),

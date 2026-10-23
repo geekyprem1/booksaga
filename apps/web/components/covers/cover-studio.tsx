@@ -29,6 +29,7 @@ export interface CoverVariation {
   artUrl: string | null;
   layers: CoverLayerData[];
   fontFamily: 'serif' | 'sans' | 'display';
+  textMode: 'overlay' | 'ai';
   isActive: boolean;
   createdAt: string;
 }
@@ -66,11 +67,12 @@ export function CoverStudio({
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<CoverVariation | null>(null);
   const [libraryFor, setLibraryFor] = useState<{ bookId: string; title: string } | null>(null);
+  const [textMode, setTextMode] = useState<'overlay' | 'ai'>('overlay');
 
   async function generate(bookId: string) {
     setError(null);
     setBusy(`generate-${bookId}`);
-    const response = await generateCoverAction({ bookId });
+    const response = await generateCoverAction({ bookId, textMode });
     setBusy(null);
     if (!response.ok) {
       setError(response.error.message);
@@ -123,9 +125,23 @@ export function CoverStudio({
             </Button>
           ) : null}
         </div>
-        <Badge variant="muted">
-          {credits} credits · {cost} per cover
-        </Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor="cover-text-mode" className="text-xs text-muted-foreground">
+            Cover text
+          </label>
+          <select
+            id="cover-text-mode"
+            value={textMode}
+            onChange={(event) => setTextMode(event.target.value as 'overlay' | 'ai')}
+            className="h-8 rounded-md border border-input bg-transparent px-2 text-xs"
+          >
+            <option value="overlay">Engine (crisp, editable)</option>
+            <option value="ai">AI (model letters it)</option>
+          </select>
+          <Badge variant="muted">
+            {credits} credits · {cost} per cover
+          </Badge>
+        </div>
       </div>
 
       {error ? (
@@ -218,7 +234,7 @@ export function CoverStudio({
                     {book.status === 'locked' ? '' : ` · ${cost} cr`}
                   </Button>
 
-                  {active?.artUrl ? (
+                  {active?.artUrl && active.textMode !== 'ai' ? (
                     <Button
                       type="button"
                       size="sm"
