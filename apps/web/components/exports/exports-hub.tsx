@@ -26,10 +26,11 @@ export interface ExportRow {
   expiresAt: string | null;
 }
 
-type Format = 'epub' | 'docx' | 'metadata';
+type Format = 'epub' | 'pdf' | 'docx' | 'metadata';
 
 const FORMAT_LABELS: Record<Format, string> = {
   epub: 'EPUB',
+  pdf: 'Print PDF',
   docx: 'DOCX',
   metadata: 'Metadata',
 };
@@ -48,12 +49,12 @@ export function ExportsHub({
   const [selectedFormats, setSelectedFormats] = useState<Record<string, Format[]>>({});
 
   function formatsFor(bookId: string): Format[] {
-    return selectedFormats[bookId] ?? ['epub', 'docx', 'metadata'];
+    return selectedFormats[bookId] ?? ['epub', 'pdf', 'docx', 'metadata'];
   }
 
   function toggle(bookId: string, format: Format) {
     setSelectedFormats((current) => {
-      const active = current[bookId] ?? ['epub', 'docx', 'metadata'];
+      const active = current[bookId] ?? ['epub', 'pdf', 'docx', 'metadata'];
       const next = active.includes(format)
         ? active.filter((item) => item !== format)
         : [...active, format];
@@ -106,7 +107,7 @@ export function ExportsHub({
               </div>
 
               <div className="flex flex-wrap gap-1">
-                {(['epub', 'docx', 'metadata'] as Format[]).map((format) => {
+                {(['epub', 'pdf', 'docx', 'metadata'] as Format[]).map((format) => {
                   const active = formatsFor(book.id).includes(format);
                   return (
                     <button

@@ -68,7 +68,7 @@ export function ImageLibrary({
     <Dialog open={open} onOpenChange={(value) => (!value ? onClose() : undefined)}>
       <DialogContent
         title="Use your own image"
-        description={`Pick an image for â€œ${bookTitle}â€. No credits are used â€” only the text is composed.`}
+        description={`Pick an image for “${bookTitle}”. No credits are used — only the text is composed.`}
         className="max-w-2xl"
       >
         <div className="flex flex-col gap-4">
@@ -87,7 +87,7 @@ export function ImageLibrary({
               )}
               Upload image
             </Button>
-            <p className="text-xs text-muted-foreground">PNG, JPEG or WebP Â· up to 10 MB</p>
+            <p className="text-xs text-muted-foreground">PNG, JPEG or WebP · up to 10 MB</p>
             <input
               ref={inputRef}
               type="file"
@@ -110,7 +110,7 @@ export function ImageLibrary({
           {images.length === 0 ? (
             <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
               <ImageIcon className="size-6" aria-hidden="true" />
-              Your library is empty â€” upload an image to start.
+              Your library is empty — upload an image to start.
             </div>
           ) : (
             <div className="grid max-h-80 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">

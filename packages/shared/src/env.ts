@@ -40,6 +40,8 @@ export const serverEnvSchema = publicEnvSchema.extend({
   WORKER_EXPORT_CONCURRENCY: intWithDefault(2),
   WORKER_AUDIO_CONCURRENCY: intWithDefault(3),
   WORKER_HEALTH_PORT: intWithDefault(3001),
+  /** Chromium binary used for the print PDF (Playwright's download or the Docker path). */
+  CHROME_EXECUTABLE_PATH: optionalString,
   OPENROUTER_RPM: intWithDefault(300),
   REPLICATE_RPM: intWithDefault(120),
 });

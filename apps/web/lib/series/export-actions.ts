@@ -11,7 +11,7 @@ import { runAction, type ActionResult } from '@/lib/actions';
 
 const input = z.object({
   bookId: z.string().uuid(),
-  formats: z.array(z.enum(['epub', 'docx', 'metadata'])).min(1).max(3),
+  formats: z.array(z.enum(['epub', 'pdf', 'docx', 'metadata'])).min(1).max(4),
 });
 
 /** Export a book (T5.7). Re-exports are free — no AI work happens. */

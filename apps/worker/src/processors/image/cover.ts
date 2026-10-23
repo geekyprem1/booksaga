@@ -3,7 +3,7 @@
  *
  *   1. Direct the series once (artPrompt + palette + font) and lock it on `series.cover_style`.
  *   2. Paint this book's scene with gpt-image-2 (2:3, text-less).
- *   3. Produce the two shipping files with sharp: ebook 1600Ãƒâ€”2560 and print front 1856Ãƒâ€”2784.
+ *   3. Produce the two shipping files with sharp: ebook 1600×2560 and print front 1856×2784.
  *   4. Save a `covers` row and make it the active cover for the book.
  *
  * Text overlay (title/author) is composed separately, so the original art stays reusable.
@@ -199,7 +199,7 @@ export async function processCover(
 
   await runner.progress(90, 'Saving the cover');
 
-  // Only one active cover per (book, type) Ã¢â‚¬â€ the partial unique index enforces it.
+  // Only one active cover per (book, type) — the partial unique index enforces it.
   await db.from('covers').update({ is_active: false }).eq('book_id', book.id).eq('type', 'ebook');
 
   const { data: cover, error: insertError } = await db
@@ -235,7 +235,7 @@ export async function processCover(
 }
 
 /**
- * Re-render an edited cover: same artwork, new text layout. No AI call and no credits Ã¢â‚¬â€ the layer
+ * Re-render an edited cover: same artwork, new text layout. No AI call and no credits — the layer
  * JSON was already validated and stored by the web action.
  */
 async function recomposeCover(

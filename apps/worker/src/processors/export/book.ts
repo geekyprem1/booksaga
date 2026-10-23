@@ -13,15 +13,20 @@ import {
   buildEpub,
   buildMetadataCsv,
   buildMetadataTxt,
+  buildPrintHtml,
   buildZip,
   chapterHtml,
   frontMatter,
+  printGeometry,
+  TRIM_INCHES,
   type ExportChapter,
   type MatterInput,
+  type TrimSize,
 } from '@booksaga/exporters';
 import type { JobRunner } from '../../lib/jobs';
+import { renderPdf } from '../../lib/pdf';
 
-export type ExportFormat = 'epub' | 'docx' | 'metadata';
+export type ExportFormat = 'epub' | 'pdf' | 'docx' | 'metadata';
 
 export interface BookExportJobData {
   jobId: string;
@@ -39,7 +44,8 @@ export async function processBookExport(
   data: BookExportJobData,
 ): Promise<void> {
   const { db } = deps;
-  const formats = data.formats?.length ? data.formats : (['epub', 'docx', 'metadata'] as ExportFormat[]);
+  const formats = data.formats?.length ? data.formats : (['epub', 'pdf', 'docx', 'metadata'] as ExportFormat[]);
+  let pdfPages: number | null = null;
 
   const { data: book } = await db.from('books').select('*').eq('id', data.refId).maybeSingle();
   if (!book) throw new Error(`Book ${data.refId} not found`);
@@ -149,6 +155,49 @@ export async function processBookExport(
     files.push({ name: `${slug}.epub`, buffer: epub });
   }
 
+  if (formats.includes('pdf')) {
+    await runner.progress(65, 'Typesetting the print PDF');
+
+    const settings = (series.settings ?? {}) as { trim?: TrimSize; bleed?: boolean };
+    const trim: TrimSize = settings.trim && settings.trim in TRIM_INCHES ? settings.trim : '6x9';
+    const bleed = settings.bleed === true;
+
+    const printInput = {
+      title,
+      author: matter.author,
+      seriesTitle: series.title,
+      partNumber: book.part_number,
+      trim,
+      bleed,
+      frontHtml: front,
+      chapters: chapters.map((chapter) => ({
+        number: chapter.number,
+        title: chapter.title,
+        html: chapterHtml(chapter, { heading: false }),
+      })),
+      backHtml: back,
+    };
+
+    // Margins depend on the page count, so render once, then re-render only if the bucket changed.
+    let geometry = printGeometry(trim, 200, bleed);
+    let rendered = await renderPdf(buildPrintHtml({ ...printInput, pageCount: 200 }), {
+      widthIn: geometry.pageWidth,
+      heightIn: geometry.pageHeight,
+    });
+
+    const exact = printGeometry(trim, rendered.pages, bleed);
+    if (exact.inside !== geometry.inside) {
+      geometry = exact;
+      rendered = await renderPdf(buildPrintHtml({ ...printInput, pageCount: rendered.pages }), {
+        widthIn: geometry.pageWidth,
+        heightIn: geometry.pageHeight,
+      });
+    }
+
+    pdfPages = rendered.pages;
+    files.push({ name: `${slug}-print.pdf`, buffer: rendered.buffer });
+  }
+
   if (formats.includes('docx')) {
     await runner.progress(55, 'Building the DOCX');
     const docx = await buildDocx({
@@ -200,6 +249,7 @@ export async function processBookExport(
   if (upload.error) throw new Error(`Could not store the export: ${upload.error.message}`);
 
   uploaded.zip = zipPath;
+  if (pdfPages !== null) uploaded.pdfPages = String(pdfPages);
 
   const expiresAt = new Date(Date.now() + EXPIRY_DAYS * 24 * 3600 * 1000).toISOString();
 
@@ -217,7 +267,7 @@ export async function processBookExport(
   await runner.progress(98, 'Done');
   await runner.complete({
     title: 'Your files are ready',
-    body: `${title} â€” ${formats.join(', ')}. The download link works for ${EXPIRY_DAYS} days.`,
+    body: `${title} — ${formats.join(', ')}. The download link works for ${EXPIRY_DAYS} days.`,
     link: `/series/${series.id}/exports`,
     type: 'export_ready',
   });

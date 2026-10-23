@@ -17,7 +17,8 @@
     "@napi-rs/canvas": "1.0.13",
     "archiver": "7.0.1",
     "docx": "9.5.1",
-    "jszip": "3.10.1"
+    "jszip": "3.10.1",
+    "pdf-lib": "1.17.1"
   },
   "devDependencies": {
     "@types/archiver": "6.0.3",

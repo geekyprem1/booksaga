@@ -230,24 +230,24 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
 
 ## M5 — Exports & KDP Preview
 
-- [ ] **T5.1** 🗄️ Migration `0006_exports.sql`: `exports` table (bucket T1.6 me ban chuka hai)
-- [ ] **T5.2** ⚙️ Front/back matter generator (title page, copyright, TOC, Read Next with `{{NEXT_BOOK_URL}}`, About the Author, Also in this Series)
-- [ ] **T5.3** ⚙️ EPUB3 exporter (ARCH §8) + epubcheck test
+- [x] **T5.1** 🗄️ Migration `0006_exports.sql`: `exports` table (bucket T1.6 me ban chuka hai)
+- [x] **T5.2** ⚙️ Front/back matter generator (title page, copyright, TOC, Read Next with `{{NEXT_BOOK_URL}}`, About the Author, Also in this Series)
+- [x] **T5.3** ⚙️ EPUB3 exporter (ARCH §8) + epubcheck test
   - _Done when:_ sample book ka EPUB epubcheck pe 0 errors de, aur Kindle Previewer/Calibre me khule.
   - _Depends:_ T2.14, T5.2
 - [ ] **T5.4** ⚙️ Print PDF exporter: Paged.js templates per trim size (5×8, 5.25×8, 5.5×8.5, 6×9), mirrored margins by page count, bleed, running headers, page numbers, recto chapter starts, embedded fonts. Playwright render
   - _Done when:_ PDF page size trim (+bleed) ke barabar ho, margins spec match karein (automated check), aur actual page count save ho.
   - _Depends:_ T2.14, T5.2
-- [ ] **T5.5** ⚙️ DOCX exporter (headings, page breaks, TOC field, front matter)
+- [x] **T5.5** ⚙️ DOCX exporter (headings, page breaks, TOC field, front matter)
   - _Depends:_ T2.14, T5.2
-- [ ] **T5.6** ⚙️ Metadata TXT + CSV (AI disclosure note ke saath)
-- [ ] **T5.7** ⚙️ `processors/export/book.ts` + `series.ts`: formats select, ZIP (archiver stream), upload, `exports` row, 30-day expiry, notification. Re-export free (0 credits)
+- [x] **T5.6** ⚙️ Metadata TXT + CSV (AI disclosure note ke saath)
+- [x] **T5.7** ⚙️ `processors/export/book.ts` + `series.ts`: formats select, ZIP (archiver stream), upload, `exports` row, 30-day expiry, notification. Re-export free (0 credits)
   - _Depends:_ T5.3–T5.6
 - [ ] **T5.8** ⚙️ Export cleanup cron (expired files delete)
   - _Depends:_ T5.7
-- [ ] **T5.9** ⚙️ `/api/files/[...path]`: ownership check → 5-min signed URL redirect
+- [x] **T5.9** ⚙️ `/api/files/[...path]`: ownership check → 5-min signed URL redirect
   - _Depends:_ T5.1
-- [ ] **T5.10** 🎨 KDP Publishing (Exports hub): per-book/series export, history, downloads, status
+- [x] **T5.10** 🎨 KDP Publishing (Exports hub): per-book/series export, history, downloads, status
   - _Depends:_ T5.7
 - [ ] **T5.11** 🎨 KDP Preview (PRD §8.10): pdf.js viewer (thumbnails, page X/N, zoom, fit, download), Ebook preview mode (HTML), Pre-flight checks panel
   - _Depends:_ T5.4
