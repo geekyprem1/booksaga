@@ -309,15 +309,15 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
 
 ### 6.6 OTO5 — Reseller & Franchise
 
-- [ ] **T6.18** 🗄️ `reseller_licenses`, `franchise_assets` + storage
-- [ ] **T6.19** ⚙️🎨 Reseller dashboard: create customer (FE account, `reseller_owner_id` set → one-time 100 credits, license consume), list, revoke (license wapas), limits 50/100
+- [x] **T6.18** 🗄️ `reseller_licenses`, `franchise_assets` + storage
+- [x] **T6.19** ⚙️🎨 Reseller dashboard: create customer (FE account, `reseller_owner_id` set → one-time 100 credits, license consume), list, revoke (license wapas), limits 50/100
   - _Depends:_ T6.18, T1.18
-- [ ] **T6.20** 🎨 Franchise kit page (sales page template, swipes, banners, demo video) + Admin → Franchise assets CRUD
+- [x] **T6.20** 🎨 Franchise kit page (sales page template, swipes, banners, demo video) + Admin → Franchise assets CRUD
   - _Depends:_ T6.18
 
 ### 6.7 Training
 
-- [ ] **T6.21** 🗄️🎨 `training_modules`, `training_lessons`, `training_progress` + Training pages (modules, lesson embed YouTube/Vimeo, mark complete, progress) + Admin CRUD
+- [x] **T6.21** 🗄️🎨 `training_modules`, `training_lessons`, `training_progress` + Training pages (modules, lesson embed YouTube/Vimeo, mark complete, progress) + Admin CRUD
 
 **Exit check M6:** Har plan ke test user banao (FE, FE+OTO1, …, OTO5). Har ek ko sirf apne features milein, aur locked features server-side bhi reject hon (direct action call se test).
 

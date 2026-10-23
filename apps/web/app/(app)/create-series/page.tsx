@@ -6,7 +6,12 @@ import { getAdminDb } from '@/lib/supabase/admin';
 
 export const metadata = { title: 'Create Series' };
 
-export default async function CreateSeriesPage() {
+export default async function CreateSeriesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ idea?: string; genre?: string; parts?: string; length?: string }>;
+}) {
+  const { idea, genre, parts, length } = await searchParams;
   const { user, account } = await getAccount();
   const db = getAdminDb();
 
@@ -43,6 +48,12 @@ export default async function CreateSeriesPage() {
         }}
         lengthPresets={lengthPresets}
         maxBooksPerSeries={account.entitlements.maxBooksPerSeries}
+        defaults={{
+          idea,
+          genre,
+          plannedBooks: parts ? Number(parts) : undefined,
+          lengthPreset: (length as LengthPreset | undefined) ?? undefined,
+        }}
       />
     </div>
   );

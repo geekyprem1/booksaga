@@ -8,9 +8,15 @@ importers:
 
   .:
     devDependencies:
+      '@booksaga/ai':
+        specifier: workspace:*
+        version: link:packages/ai
       '@booksaga/core':
         specifier: workspace:*
         version: link:packages/core
+      '@booksaga/exporters':
+        specifier: workspace:*
+        version: link:packages/exporters
       '@booksaga/shared':
         specifier: workspace:*
         version: link:packages/shared

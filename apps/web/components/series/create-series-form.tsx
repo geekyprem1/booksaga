@@ -31,6 +31,13 @@ export interface CreateSeriesFormProps {
   costs: { short: number; standard: number; full: number; enhance: number };
   lengthPresets: LengthPreset[];
   maxBooksPerSeries: number;
+  /** Prefill from a template or DFY idea. */
+  defaults?: {
+    idea?: string;
+    genre?: string;
+    plannedBooks?: number;
+    lengthPreset?: LengthPreset;
+  };
 }
 
 const fictionGenres = GENRES.filter((g) => g.isFiction);
@@ -42,19 +49,28 @@ export function CreateSeriesForm({
   costs,
   lengthPresets,
   maxBooksPerSeries,
+  defaults,
 }: CreateSeriesFormProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  const [idea, setIdea] = useState('');
+  const matchedGenre = GENRES.find(
+    (genre) =>
+      genre.label.toLowerCase() === (defaults?.genre ?? '').toLowerCase() ||
+      genre.id.toLowerCase() === (defaults?.genre ?? '').toLowerCase(),
+  );
+
+  const [idea, setIdea] = useState(defaults?.idea ?? '');
   const [title, setTitle] = useState('');
   const [penName, setPenName] = useState(penNames[0] ?? '');
-  const [genre, setGenre] = useState(GENRES[0]?.id ?? 'fantasy');
+  const [genre, setGenre] = useState(matchedGenre?.id ?? GENRES[0]?.id ?? 'fantasy');
   const [tone, setTone] = useState<string>(TONES[0]);
   const [audience, setAudience] = useState<string>(AUDIENCES[4] ?? 'Adults');
-  const [plannedBooks, setPlannedBooks] = useState(5);
+  const [plannedBooks, setPlannedBooks] = useState(defaults?.plannedBooks ?? 5);
   const [lengthPreset, setLengthPreset] = useState<LengthPreset>(
-    lengthPresets[0] ?? 'short',
+    defaults?.lengthPreset && lengthPresets.includes(defaults.lengthPreset)
+      ? defaults.lengthPreset
+      : (lengthPresets[0] ?? 'short'),
   );
   const [bookTitle, setBookTitle] = useState('');
   const [settings, setSettings] = useState<SeriesSettings>(DEFAULT_SERIES_SETTINGS);
@@ -185,7 +201,7 @@ export function CreateSeriesForm({
                   rows={5}
                   value={idea}
                   onChange={(e) => setIdea(e.target.value)}
-                  placeholder="A harbour city where debts are inherited like weather. When a reclusive bookkeeper dies, her estranged niece inherits a ledger that proves half the city's founding families bought their reputations…"
+                  placeholder="A harbour city where debts are inherited like weather. When a reclusive bookkeeper dies, her estranged niece inherits a ledger that proves half the city's founding families bought their reputationsÃ¢â‚¬Â¦"
                   className="w-full resize-y rounded-lg border border-input bg-background/60 p-3 text-sm placeholder:text-muted-foreground/60 focus-visible:border-ring"
                 />
                 <p className="text-xs text-muted-foreground">{idea.length} / 2000</p>
@@ -362,7 +378,7 @@ export function CreateSeriesForm({
                     >
                       {['5x8', '5.25x8', '5.5x8.5', '6x9'].map((t) => (
                         <option key={t} value={t}>
-                          {t.replace('x', ' × ')} in
+                          {t.replace('x', ' Ãƒâ€” ')} in
                         </option>
                       ))}
                     </Select>
@@ -434,7 +450,7 @@ export function CreateSeriesForm({
           <div className="flex flex-wrap items-center gap-3">
             <Button type="submit" size="lg" disabled={pending || !canAfford}>
               {pending ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Wand2 aria-hidden="true" />}
-              Generate Part 1 · {bookCost} credits
+              Generate Part 1 Ã‚Â· {bookCost} credits
             </Button>
             <Button
               type="button"
@@ -443,7 +459,7 @@ export function CreateSeriesForm({
               onClick={handleEnhance}
               disabled={pending || idea.trim().length < 20}
             >
-              <Sparkles aria-hidden="true" /> Enhance with AI · {costs.enhance} credit
+              <Sparkles aria-hidden="true" /> Enhance with AI Ã‚Â· {costs.enhance} credit
             </Button>
             <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <Coins className="size-4 text-amber" aria-hidden="true" />

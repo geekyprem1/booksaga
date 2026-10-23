@@ -725,6 +725,87 @@ export type Database = {
           },
         ]
       }
+      dfy_ideas: {
+        Row: {
+          created_at: string
+          hook: string | null
+          id: string
+          is_published: boolean
+          keywords: string[]
+          niche: string
+          premise: string
+          slug: string
+          sort_order: number
+          tier: string
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          hook?: string | null
+          id?: string
+          is_published?: boolean
+          keywords?: string[]
+          niche: string
+          premise: string
+          slug: string
+          sort_order?: number
+          tier?: string
+          title: string
+        }
+        Update: {
+          created_at?: string
+          hook?: string | null
+          id?: string
+          is_published?: boolean
+          keywords?: string[]
+          niche?: string
+          premise?: string
+          slug?: string
+          sort_order?: number
+          tier?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      dfy_packs: {
+        Row: {
+          contents: Json
+          created_at: string
+          description: string | null
+          genre: string
+          id: string
+          is_published: boolean
+          slug: string
+          sort_order: number
+          tier: string
+          title: string
+        }
+        Insert: {
+          contents?: Json
+          created_at?: string
+          description?: string | null
+          genre: string
+          id?: string
+          is_published?: boolean
+          slug: string
+          sort_order?: number
+          tier?: string
+          title: string
+        }
+        Update: {
+          contents?: Json
+          created_at?: string
+          description?: string | null
+          genre?: string
+          id?: string
+          is_published?: boolean
+          slug?: string
+          sort_order?: number
+          tier?: string
+          title?: string
+        }
+        Relationships: []
+      }
       exports: {
         Row: {
           book_id: string | null
@@ -1324,6 +1405,72 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      templates: {
+        Row: {
+          audience: string | null
+          category: string
+          cover_path: string | null
+          created_at: string
+          genre: string
+          id: string
+          is_published: boolean
+          keywords: string[]
+          length_preset: string
+          planned_books: number
+          premise: string
+          slug: string
+          sort_order: number
+          subtitle: string | null
+          tier: string
+          title: string
+          tone: string | null
+          updated_at: string
+          uses: number
+        }
+        Insert: {
+          audience?: string | null
+          category: string
+          cover_path?: string | null
+          created_at?: string
+          genre: string
+          id?: string
+          is_published?: boolean
+          keywords?: string[]
+          length_preset?: string
+          planned_books?: number
+          premise: string
+          slug: string
+          sort_order?: number
+          subtitle?: string | null
+          tier?: string
+          title: string
+          tone?: string | null
+          updated_at?: string
+          uses?: number
+        }
+        Update: {
+          audience?: string | null
+          category?: string
+          cover_path?: string | null
+          created_at?: string
+          genre?: string
+          id?: string
+          is_published?: boolean
+          keywords?: string[]
+          length_preset?: string
+          planned_books?: number
+          premise?: string
+          slug?: string
+          sort_order?: number
+          subtitle?: string | null
+          tier?: string
+          title?: string
+          tone?: string | null
+          updated_at?: string
+          uses?: number
+        }
+        Relationships: []
       }
       training_lessons: {
         Row: {
