@@ -27,6 +27,7 @@ import { processRewrite } from './processors/text/rewrite';
 import { processMetadata } from './processors/text/metadata';
 import { processTrashPurge } from './processors/system/trashPurge';
 import { processCover } from './processors/image/cover';
+import { processBookExport } from './processors/export/book';
 
 interface Runtime {
   env: ServerEnv;
@@ -92,6 +93,12 @@ async function dispatch(runtime: Runtime, job: Job, runner: JobRunner): Promise<
       console.log(`[reaper] requeued=${summary.requeued} failed=${summary.failed}`);
       return;
     }
+    case 'export_book':
+      return processBookExport(
+        { db: runtime.db },
+        runner,
+        job.data as { jobId: string; userId: string; refId: string; formats?: ('epub' | 'docx' | 'metadata')[] },
+      );
     case 'cover':
       return processCover(
         { db: runtime.db, ai: runtime.ai },
@@ -247,11 +254,11 @@ async function main(): Promise<void> {
   const server = startHealthServer(runtime);
 
   console.log(
-    `[worker] up · queues=${[...enabled].join(',')} · text=${concurrency.text} · ai_mode=${env.AI_MODE}`,
+    `[worker] up Â· queues=${[...enabled].join(',')} Â· text=${concurrency.text} Â· ai_mode=${env.AI_MODE}`,
   );
 
   const shutdown = async (signal: string) => {
-    console.log(`[worker] ${signal} received, draining…`);
+    console.log(`[worker] ${signal} received, drainingâ€¦`);
     server.close();
     await Promise.all(runtime.workers.map((w) => w.close()));
     await closeQueues(queues);

@@ -5,11 +5,6 @@ import { requireUser } from '@/lib/auth/session';
 import { loadSeries } from '@/lib/series/load';
 
 const TABS: Record<string, { title: string; milestone: string; detail: string }> = {
-  exports: {
-    title: 'Exports',
-    milestone: 'M5',
-    detail: 'EPUB3, print-ready PDF, DOCX, covers and metadata, plus the KDP preview.',
-  },
   'box-set': {
     title: 'Box Set',
     milestone: 'M6',

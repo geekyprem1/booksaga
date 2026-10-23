@@ -592,6 +592,70 @@ export type Database = {
           },
         ]
       }
+      exports: {
+        Row: {
+          book_id: string | null
+          created_at: string
+          error: string | null
+          expires_at: string | null
+          files: Json
+          formats: string[]
+          id: string
+          series_id: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          book_id?: string | null
+          created_at?: string
+          error?: string | null
+          expires_at?: string | null
+          files?: Json
+          formats?: string[]
+          id?: string
+          series_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          book_id?: string | null
+          created_at?: string
+          error?: string | null
+          expires_at?: string | null
+          files?: Json
+          formats?: string[]
+          id?: string
+          series_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exports_book_id_fkey"
+            columns: ["book_id"]
+            isOneToOne: false
+            referencedRelation: "books"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exports_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "series"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exports_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       images: {
         Row: {
           created_at: string

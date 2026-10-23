@@ -219,7 +219,7 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
   - _Depends:_ T4.1
 - [x] **T4.8** ⚙️ Auto-Generate Covers toggle: book generate hone ke baad cover job enqueue ho (agar balance ho; warna notification)
   - _Depends:_ T4.4, T2.15
-- [ ] **T4.9** 🎨 Image Editor (standalone): crop, brightness/contrast, text, shapes, layers, export PNG/JPG
+- [x] **T4.9** 🎨 Image Editor (standalone): crop, brightness/contrast, text, shapes, layers, export PNG/JPG
   - _Depends:_ T4.3
 - [x] **T4.10** 🎨 Roadmap/Dashboard/My Series pe active covers dikhein
   - _Depends:_ T4.6
