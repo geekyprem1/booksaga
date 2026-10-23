@@ -59,6 +59,25 @@ export default async function SeriesRoadmapPage({ params }: { params: Promise<{ 
     }
   }
 
+  // Active cover thumbnail per part (T4.10).
+  const { data: activeCovers } = bookIds.length
+    ? await db
+        .from('covers')
+        .select('book_id, final_path')
+        .in('book_id', bookIds)
+        .eq('type', 'ebook')
+        .eq('is_active', true)
+    : { data: [] as { book_id: string; final_path: string | null }[] };
+
+  const coverUrls = new Map<string, string>();
+  await Promise.all(
+    (activeCovers ?? []).map(async (cover) => {
+      if (!cover.final_path) return;
+      const { data } = await db.storage.from('covers').createSignedUrl(cover.final_path, 3600);
+      if (data?.signedUrl) coverUrls.set(cover.book_id, data.signedUrl);
+    }),
+  );
+
   const parts: RoadmapPart[] = (books ?? []).map((book) => {
     const job = activeJob.get(book.id);
     return {
@@ -73,6 +92,7 @@ export default async function SeriesRoadmapPage({ params }: { params: Promise<{ 
       jobId: job?.id ?? null,
       jobProgress: job?.progress ?? 0,
       jobStep: job?.step_label ?? null,
+      coverUrl: coverUrls.get(book.id) ?? null,
     };
   });
 

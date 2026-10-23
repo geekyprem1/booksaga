@@ -19,9 +19,9 @@ export const characterSchema = z.object({
   backstory: z.string().trim().max(2000).optional(),
   relationships: z.array(z.string().trim().max(200)).default([]),
   secrets: z.array(z.string().trim().max(300)).default([]),
-  /** 'active' | 'dead' | 'missing' Ã¢â‚¬â€ free text keeps the model honest about long series. */
+  /** 'active' | 'dead' | 'missing' — free text keeps the model honest about long series. */
   status: z.string().trim().max(300).default('active'),
-  /** 'user' entries are never overwritten by the AI merge (ARCH Ã‚Â§6). */
+  /** 'user' entries are never overwritten by the AI merge (ARCH §6). */
   source: z.enum(['ai', 'user']).default('ai'),
 });
 export type Character = z.infer<typeof characterSchema>;
@@ -209,3 +209,12 @@ export const suggestionsSchema = z.object({
     .max(8),
 });
 export type Suggestions = z.infer<typeof suggestionsSchema>;
+
+/** Cover art direction for a series (T4.4/T4.5). */
+export const coverBriefSchema = z.object({
+  artPrompt: z.string().trim().min(20).max(600),
+  palette: z.array(z.string().trim().min(1).max(40)).min(2).max(5),
+  scene: z.string().trim().min(10).max(600),
+  fontFamily: z.enum(['serif', 'sans', 'display']).default('serif'),
+});
+export type CoverBrief = z.infer<typeof coverBriefSchema>;

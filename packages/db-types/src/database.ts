@@ -405,6 +405,62 @@ export type Database = {
           },
         ]
       }
+      covers: {
+        Row: {
+          art_path: string | null
+          book_id: string
+          created_at: string
+          final_path: string | null
+          id: string
+          is_active: boolean
+          layers: Json | null
+          mode: string
+          page_count: number | null
+          prompt: string | null
+          stale: boolean
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          art_path?: string | null
+          book_id: string
+          created_at?: string
+          final_path?: string | null
+          id?: string
+          is_active?: boolean
+          layers?: Json | null
+          mode?: string
+          page_count?: number | null
+          prompt?: string | null
+          stale?: boolean
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          art_path?: string | null
+          book_id?: string
+          created_at?: string
+          final_path?: string | null
+          id?: string
+          is_active?: boolean
+          layers?: Json | null
+          mode?: string
+          page_count?: number | null
+          prompt?: string | null
+          stale?: boolean
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "covers_book_id_fkey"
+            columns: ["book_id"]
+            isOneToOne: false
+            referencedRelation: "books"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       credit_balances: {
         Row: {
           balance: number
@@ -532,6 +588,47 @@ export type Database = {
             columns: ["user_plan_id"]
             isOneToOne: false
             referencedRelation: "user_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      images: {
+        Row: {
+          created_at: string
+          height: number | null
+          id: string
+          path: string
+          prompt: string | null
+          source: string
+          user_id: string
+          width: number | null
+        }
+        Insert: {
+          created_at?: string
+          height?: number | null
+          id?: string
+          path: string
+          prompt?: string | null
+          source?: string
+          user_id: string
+          width?: number | null
+        }
+        Update: {
+          created_at?: string
+          height?: number | null
+          id?: string
+          path?: string
+          prompt?: string | null
+          source?: string
+          user_id?: string
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "images_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]

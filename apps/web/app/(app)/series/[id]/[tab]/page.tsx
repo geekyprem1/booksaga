@@ -5,11 +5,6 @@ import { requireUser } from '@/lib/auth/session';
 import { loadSeries } from '@/lib/series/load';
 
 const TABS: Record<string, { title: string; milestone: string; detail: string }> = {
-  covers: {
-    title: 'Covers',
-    milestone: 'M4',
-    detail: 'Matching covers for every part, a Konva editor and the paperback full-wrap PDF.',
-  },
   exports: {
     title: 'Exports',
     milestone: 'M5',

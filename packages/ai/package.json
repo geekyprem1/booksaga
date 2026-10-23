@@ -15,6 +15,7 @@
   "dependencies": {
     "@booksaga/db-types": "workspace:*",
     "@booksaga/shared": "workspace:*",
+    "@napi-rs/canvas": "1.0.13",
     "@supabase/supabase-js": "2.118.0",
     "zod": "4.6.7"
   },

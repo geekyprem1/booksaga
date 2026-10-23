@@ -1,0 +1,168 @@
+/**
+ * Cover generation (T4.4).
+ *
+ *   1. Direct the series once (artPrompt + palette + font) and lock it on `series.cover_style`.
+ *   2. Paint this book's scene with gpt-image-2 (2:3, text-less).
+ *   3. Produce the two shipping files with sharp: ebook 1600×2560 and print front 1856×2784.
+ *   4. Save a `covers` row and make it the active cover for the book.
+ *
+ * Text overlay (title/author) is composed separately, so the original art stays reusable.
+ */
+import { randomUUID } from 'node:crypto';
+import sharp from 'sharp';
+import { coverBriefSchema, type Bible, type CoverBrief } from '@booksaga/shared';
+import type { AiClient } from '@booksaga/ai';
+import type { DbClient } from '@booksaga/core';
+import type { JobRunner } from '../../lib/jobs';
+import { coverBriefPrompt, coverImagePrompt, fallbackBrief } from '../../prompts/v1/cover';
+
+export interface CoverJobData {
+  jobId: string;
+  userId: string;
+  /** book id */
+  refId: string;
+  /** Regenerate an existing cover instead of creating a new one. */
+  variation?: boolean;
+}
+
+export async function processCover(
+  deps: { db: DbClient; ai: AiClient },
+  runner: JobRunner,
+  data: CoverJobData,
+): Promise<void> {
+  const { db, ai } = deps;
+
+  const { data: book } = await db.from('books').select('*').eq('id', data.refId).maybeSingle();
+  if (!book) throw new Error(`Book ${data.refId} not found`);
+
+  const { data: series } = await db
+    .from('series')
+    .select('*')
+    .eq('id', book.series_id)
+    .maybeSingle();
+  if (!series) throw new Error(`Series ${book.series_id} not found`);
+  if (series.user_id !== data.userId) throw new Error('This book does not belong to the job owner.');
+
+  const { data: bibleRow } = await db
+    .from('series_bible')
+    .select('data')
+    .eq('series_id', series.id)
+    .maybeSingle();
+  const bible = (bibleRow?.data ?? {}) as unknown as Bible;
+
+  await runner.progress(10, 'Directing the cover');
+
+  let style = series.cover_style as CoverBrief | null;
+
+  if (!style?.artPrompt) {
+    const input = {
+      seriesTitle: series.title,
+      genre: series.genre,
+      tone: series.tone,
+      isFiction: series.is_fiction,
+      partNumber: book.part_number,
+      bookTitle: book.title,
+      premise: book.premise,
+      bible,
+    };
+
+    try {
+      const brief = await ai.json({
+        ...coverBriefPrompt(input),
+        schema: coverBriefSchema,
+        label: 'CoverBrief',
+        usage: { userId: data.userId, jobId: runner.jobId, purpose: 'cover_brief' },
+        mock: { part: book.part_number, seriesTitle: series.title, genre: series.genre },
+      });
+      style = brief.data;
+    } catch (err) {
+      // A bad brief must not block the cover: fall back to a genre-appropriate direction.
+      console.warn('[cover] brief failed, using the fallback:', err instanceof Error ? err.message : err);
+      style = fallbackBrief(input);
+    }
+
+    // Book 1's cover locks the look of the whole series.
+    await db.from('series').update({ cover_style: style }).eq('id', series.id);
+  }
+
+  if (!style) throw new Error('Could not establish a cover style.');
+
+  await runner.progress(30, 'Painting the artwork');
+
+  const prompt = coverImagePrompt({
+    artPrompt: style.artPrompt,
+    palette: style.palette,
+    scene: style.scene,
+    genre: series.genre,
+    title: book.title,
+    author: series.pen_name,
+  });
+
+  const art = await ai.image({
+    prompt,
+    aspectRatio: '1024x1536',
+    usage: { userId: data.userId, jobId: runner.jobId, purpose: 'cover' },
+  });
+
+  const coverId = randomUUID();
+  const basePath = `${data.userId}/${series.id}/${book.id}`;
+
+  const artPath = `${basePath}/${coverId}.png`;
+  const artUpload = await db.storage
+    .from('cover-art')
+    .upload(artPath, art.buffer, { contentType: 'image/png', upsert: true });
+  if (artUpload.error) throw new Error(`Could not store the artwork: ${artUpload.error.message}`);
+
+  await runner.progress(70, 'Building the ebook and print files');
+
+  const [ebook, print] = await Promise.all([
+    sharp(art.buffer).resize(1600, 2560, { fit: 'cover', position: 'centre' }).jpeg({ quality: 90 }).toBuffer(),
+    sharp(art.buffer).resize(1856, 2784, { fit: 'cover', position: 'centre' }).jpeg({ quality: 90 }).toBuffer(),
+  ]);
+
+  const ebookPath = `${basePath}/ebook-${coverId}.jpg`;
+  const printPath = `${basePath}/print-${coverId}.jpg`;
+
+  const [ebookUpload, printUpload] = await Promise.all([
+    db.storage.from('covers').upload(ebookPath, ebook, { contentType: 'image/jpeg', upsert: true }),
+    db.storage.from('covers').upload(printPath, print, { contentType: 'image/jpeg', upsert: true }),
+  ]);
+  if (ebookUpload.error || printUpload.error) {
+    throw new Error(
+      `Could not store the cover: ${ebookUpload.error?.message ?? printUpload.error?.message}`,
+    );
+  }
+
+  await runner.progress(90, 'Saving the cover');
+
+  // Only one active cover per (book, type) — the partial unique index enforces it.
+  await db.from('covers').update({ is_active: false }).eq('book_id', book.id).eq('type', 'ebook');
+
+  const { data: cover, error: insertError } = await db
+    .from('covers')
+    .insert({
+      book_id: book.id,
+      type: 'ebook',
+      art_path: artPath,
+      final_path: ebookPath,
+      mode: 'overlay',
+      prompt,
+      is_active: true,
+      layers: {
+        width: 1600,
+        height: 2560,
+        print: { path: printPath, width: 1856, height: 2784 },
+        style,
+      },
+    })
+    .select('id')
+    .single();
+  if (insertError || !cover) throw new Error(`Could not save the cover: ${insertError?.message}`);
+
+  await runner.complete({
+    title: 'Cover ready',
+    body: `A new cover for ${book.title || `Part ${book.part_number}`} is waiting in Cover Studio.`,
+    link: `/series/${series.id}/covers`,
+    type: 'cover_ready',
+  });
+}

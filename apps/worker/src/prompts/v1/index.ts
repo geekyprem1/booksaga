@@ -3,7 +3,7 @@
  *
  * Layout matters for cost: every prompt puts the *static* block (system + style guide + anti-slop
  * rules) first and the volatile context last, so a provider-side prefix cache can hit across the
- * chapters of one book (ARCH Ãƒâ€šÃ‚Â§5.3).
+ * chapters of one book (ARCH §5.3).
  *
  * Bump PROMPT_VERSION when the wording changes; it is stored on every generated book.
  */
@@ -35,7 +35,7 @@ CRAFT RULES
 - Concrete over abstract. A specific detail beats three adjectives.
 - Vary sentence length; avoid three long sentences in a row.
 - Dialogue does work: it reveals character, applies pressure, or moves the plot.
-- Every chapter ends on forward motion (a question, a decision, a threat) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â never on a moral summary.
+- Every chapter ends on forward motion (a question, a decision, a threat) — never on a moral summary.
 - Show the cost of choices. Do not explain the theme to the reader.
 - Keep continuity with the supplied bible exactly: names, ages, eye colour, places, dates, injuries.
 
@@ -178,14 +178,14 @@ export function chapterPrompt(input: ChapterInput): Prompt {
   return {
     system: `${STYLE_GUIDE}
 
-TASK: write one chapter of a novel. Output prose only ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â no title, no notes, no markdown headings.`,
+TASK: write one chapter of a novel. Output prose only — no title, no notes, no markdown headings.`,
     messages: [
       {
         role: 'user',
         content: [
-          `Series: ${input.seriesTitle} Ãƒâ€šÃ‚Â· Part ${input.partNumber} Ãƒâ€šÃ‚Â· Chapter ${input.chapterNumber}`,
+          `Series: ${input.seriesTitle} · Part ${input.partNumber} · Chapter ${input.chapterNumber}`,
           `Chapter title: ${input.chapterTitle}`,
-          `POV: ${input.pov} Ãƒâ€šÃ‚Â· Tense: ${input.tense}`,
+          `POV: ${input.pov} · Tense: ${input.tense}`,
           `Target length: ~${input.targetWords} words. Do not stop early; a chapter under ${Math.round(input.targetWords * 0.85)} words is a failure.`,
           `Beats to hit:\n${input.beats.map((b) => `- ${b}`).join('\n')}`,
           '',
@@ -290,7 +290,7 @@ RULES
       {
         role: 'user',
         content: [
-          `Series: ${input.seriesTitle} Ãƒâ€šÃ‚Â· Part ${input.partNumber}`,
+          `Series: ${input.seriesTitle} · Part ${input.partNumber}`,
           `Working title: ${input.bookTitle}`,
           `Genre: ${input.genre} (${input.isFiction ? 'fiction' : 'non-fiction'})`,
           `Pen name: ${input.penName}`,
@@ -429,7 +429,7 @@ REQUIREMENTS
           '',
           'Existing parts:',
           input.existingParts
-            .map((p) => `Part ${p.partNumber} ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â ${p.title}: ${p.premise}`)
+            .map((p) => `Part ${p.partNumber} — ${p.title}: ${p.premise}`)
             .join('\n'),
           '',
           'Bible:',

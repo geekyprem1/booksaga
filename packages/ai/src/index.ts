@@ -1,9 +1,10 @@
 /**
- * The AI facade used by the worker (T2.2–T2.5).
+ * The AI facade used by the worker (T2.2–T2.5, T4.2).
  *
  *   const ai = createAi({ mode, apiKey, model, db });
  *   const chapter = await ai.text({ ... });           // plain prose
  *   const outline = await ai.json({ ..., schema });   // validated structured output
+ *   const art = await ai.image({ ... });              // Replicate image
  *
  * Every call writes one `ai_usage_log` row. In mock mode the call never leaves the process.
  */
@@ -11,9 +12,12 @@ import type { z } from 'zod';
 import { completeJson } from './json';
 import { mockComplete } from './mock';
 import { openRouterComplete, type OpenRouterOptions } from './openrouter';
+import { mockImage, replicateImage, type ReplicateOptions } from './replicate';
 import {
   AiError,
   type AiMode,
+  type ImageRequest,
+  type ImageResult,
   type JsonRequest,
   type JsonResult,
   type TextRequest,
@@ -26,12 +30,14 @@ export * from './usage';
 export { extractJson, completeJson } from './json';
 export { mockComplete } from './mock';
 export { backoffDelay, isRetryableStatus } from './openrouter';
+export { replicateImage, mockImage } from './replicate';
 
 export interface AiClient {
   readonly mode: AiMode;
   readonly model: string;
   text(req: TextRequest): Promise<TextResult>;
   json<S extends z.ZodTypeAny>(req: JsonRequest<S>): Promise<JsonResult<z.infer<S>>>;
+  image(req: ImageRequest): Promise<ImageResult>;
 }
 
 export interface CreateAiOptions {
@@ -44,6 +50,11 @@ export interface CreateAiOptions {
   baseUrl?: string;
   timeoutMs?: number;
   maxAttempts?: number;
+
+  /** Replicate (image generation). */
+  replicateToken?: string;
+  imageModel?: string;
+  imageQuality?: 'low' | 'medium' | 'high' | 'auto';
 }
 
 export function createAi(opts: CreateAiOptions): AiClient {
@@ -56,6 +67,15 @@ export function createAi(opts: CreateAiOptions): AiClient {
           baseUrl: opts.baseUrl,
           timeoutMs: opts.timeoutMs,
           maxAttempts: opts.maxAttempts,
+        }
+      : null;
+
+  const replicate: ReplicateOptions | null =
+    opts.mode === 'live' && opts.replicateToken
+      ? {
+          token: opts.replicateToken,
+          model: opts.imageModel ?? 'openai/gpt-image-2',
+          timeoutMs: opts.timeoutMs,
         }
       : null;
 
@@ -91,5 +111,28 @@ export function createAi(opts: CreateAiOptions): AiClient {
     model: live ? opts.model : 'mock',
     text: (req) => complete(req),
     json: <S extends z.ZodTypeAny>(req: JsonRequest<S>) => completeJson(complete, req),
+
+    image: async (req) => {
+      const quality = req.quality ?? opts.imageQuality ?? 'low';
+      const result = replicate
+        ? await replicateImage(replicate, { ...req, quality })
+        : mockImage({ ...req, quality });
+
+      if (opts.db) {
+        await logUsage(opts.db, {
+          userId: req.usage.userId,
+          jobId: req.usage.jobId,
+          provider: replicate ? 'replicate' : 'mock',
+          model: result.model,
+          purpose: req.usage.purpose,
+          inputTokens: 0,
+          cachedInputTokens: 0,
+          outputTokens: 0,
+          images: 1,
+          costUsd: result.costUsd,
+        });
+      }
+      return result;
+    },
   };
 }

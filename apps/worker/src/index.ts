@@ -26,6 +26,7 @@ import { processSuggestions } from './processors/text/suggestions';
 import { processRewrite } from './processors/text/rewrite';
 import { processMetadata } from './processors/text/metadata';
 import { processTrashPurge } from './processors/system/trashPurge';
+import { processCover } from './processors/image/cover';
 
 interface Runtime {
   env: ServerEnv;
@@ -53,7 +54,7 @@ async function dispatch(runtime: Runtime, job: Job, runner: JobRunner): Promise<
   switch (type) {
     case 'book':
       return processBook(
-        { db: runtime.db, ai: runtime.ai, aiFast: runtime.aiFast },
+        { db: runtime.db, ai: runtime.ai, aiFast: runtime.aiFast, queues: runtime.queues },
         runner,
         job.data as { jobId: string; userId: string; refId: string; ledgerId: number },
       );
@@ -91,6 +92,12 @@ async function dispatch(runtime: Runtime, job: Job, runner: JobRunner): Promise<
       console.log(`[reaper] requeued=${summary.requeued} failed=${summary.failed}`);
       return;
     }
+    case 'cover':
+      return processCover(
+        { db: runtime.db, ai: runtime.ai },
+        runner,
+        job.data as { jobId: string; userId: string; refId: string; variation?: boolean },
+      );
     case 'trash_purge':
       return processTrashPurge({ db: runtime.db }, runner);
     default:

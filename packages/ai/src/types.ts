@@ -56,6 +56,25 @@ export interface JsonRequest<S extends z.ZodTypeAny = z.ZodTypeAny> extends Text
   label: string;
 }
 
+export interface ImageRequest {
+  prompt: string;
+  /** gpt-image-2 aspect enum, e.g. `1024x1536` (2:3, the print front ratio). */
+  aspectRatio?: string;
+  quality?: 'low' | 'medium' | 'high' | 'auto';
+  /** Reference images for series-style consistency (part 2+ reuses part 1's art). */
+  referenceImages?: string[];
+  usage: UsageContext;
+}
+
+export interface ImageResult {
+  buffer: Buffer;
+  mime: string;
+  costUsd: number;
+  width: number;
+  height: number;
+  model: string;
+}
+
 export interface JsonResult<T> extends TextResult {
   data: T;
 }

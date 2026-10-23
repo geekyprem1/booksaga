@@ -29,6 +29,8 @@ export interface RoadmapPart {
   jobId: string | null;
   jobProgress: number;
   jobStep: string | null;
+  /** Signed URL of the active cover, when one exists (T4.10). */
+  coverUrl: string | null;
 }
 
 export interface RoadmapProps {
@@ -231,11 +233,21 @@ export function Roadmap({
                   </Badge>
                 </div>
 
-                <div className="flex-1">
-                  <p className="font-semibold leading-snug">
-                    {part.title || `Part ${part.partNumber}`}
-                  </p>
-                  <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">{part.premise}</p>
+                <div className="flex flex-1 gap-2">
+                  {part.coverUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={part.coverUrl}
+                      alt={`Cover for part ${part.partNumber}`}
+                      className="h-20 w-[52px] shrink-0 rounded border border-border object-cover"
+                    />
+                  ) : null}
+                  <div className="min-w-0">
+                    <p className="font-semibold leading-snug">
+                      {part.title || `Part ${part.partNumber}`}
+                    </p>
+                    <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">{part.premise}</p>
+                  </div>
                 </div>
 
                 <p className="text-xs text-muted-foreground">

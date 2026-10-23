@@ -1,5 +1,5 @@
 /**
- * Book generation pipeline (T2.15, ARCH Ã‚Â§6).
+ * Book generation pipeline (T2.15, ARCH Â§6).
  *
  *   series plan (part 1 only) -> outline -> chapter loop -> continuity -> metadata -> unlock next
  *
@@ -17,6 +17,7 @@ import {
   countWords,
   markdownToTiptap,
   plannedChapters,
+  resolveCreditSource,
   seriesPlanSchema,
   tiptapToPlainText,
   type Bible,
@@ -24,7 +25,7 @@ import {
   type LengthPreset,
   type TiptapDoc,
 } from '@booksaga/shared';
-import { loadAccount, type Database, type DbClient } from '@booksaga/core';
+import { loadAccount, enqueueJob, type Database, type DbClient, type Queues } from '@booksaga/core';
 import type { AiClient } from '@booksaga/ai';
 import type { JobRunner } from '../../lib/jobs';
 import { mergeBible } from '../../pipeline/bibleMerge';
@@ -56,6 +57,8 @@ export interface BookProcessorDeps {
   ai: AiClient;
   /** Cheaper/faster model for structured steps (facts, continuity, metadata). Defaults to `ai`. */
   aiFast?: AiClient;
+  /** Queue registry — used to enqueue the auto-cover after a book completes. */
+  queues: Queues;
 }
 
 const CHAPTER_BASE = 10;
@@ -268,7 +271,7 @@ export async function processBook(
    *
    * This is the only step that overlaps with writing: chapter N+1 is written while chapter N's
    * facts are extracted. Only one extraction is ever in flight, so merges stay strictly ordered,
-   * and the next chapter still receives the previous chapter's prose through `previousTail` — the
+   * and the next chapter still receives the previous chapter's prose through `previousTail` â€” the
    * structured facts catch up one chapter later, which is what makes the overlap safe.
    */
   const extractFacts = async (target: (typeof all)[number], text: string): Promise<void> => {
@@ -477,10 +480,42 @@ export async function processBook(
   await runner.progress(99, 'Finishing up');
   await runner.complete({
     title: `Part ${book.part_number} is ready`,
-    body: `${book.title || metadata.data.title} Ã¢â‚¬â€ ${totalWords.toLocaleString()} words. Open it to edit, cover and export.`,
+    body: `${book.title || metadata.data.title} â€” ${totalWords.toLocaleString()} words. Open it to edit, cover and export.`,
     link: `/series/${series.id}`,
     type: 'book_ready',
   });
+
+  // Auto-generate a cover when the series asks for it (T4.8). Best-effort: an empty balance must
+  // never fail a book that is already written and paid for.
+  const autoCovers = (series.settings as { autoCovers?: boolean } | null)?.autoCovers;
+  if (autoCovers) {
+    try {
+      const { data: coverCost } = await db
+        .from('credit_costs')
+        .select('credits')
+        .eq('action', 'cover')
+        .maybeSingle();
+
+      const source = resolveCreditSource(
+        { id: data.userId, parentAgencyId: profile?.parent_agency_id ?? null },
+        'cover',
+      );
+
+      await enqueueJob(db, deps.queues, {
+        type: 'cover',
+        refId: book.id,
+        userId: data.userId,
+        source,
+        action: 'cover',
+        amount: coverCost?.credits ?? 2,
+        reason: 'Auto cover',
+      });
+    } catch (err) {
+      console.warn(
+        `[cover] auto cover skipped: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
