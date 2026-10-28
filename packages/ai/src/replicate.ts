@@ -10,6 +10,7 @@
  */
 import { createCanvas } from '@napi-rs/canvas';
 import type { ImageRequest, ImageResult } from './types';
+import { retryOn429 } from './limiter';
 import { AiError } from './types';
 
 export interface ReplicateOptions {
@@ -63,16 +64,18 @@ export async function replicateImage(
 
   const started = Date.now();
 
-  const create = await fetch(`${baseUrl}/models/${owner}/${name}/predictions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${opts.token}`,
-      'Content-Type': 'application/json',
-      Prefer: 'wait',
-    },
-    body: JSON.stringify({ input }),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  const create = await retryOn429(() =>
+    fetch(`${baseUrl}/models/${owner}/${name}/predictions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${opts.token}`,
+        'Content-Type': 'application/json',
+        Prefer: 'wait',
+      },
+      body: JSON.stringify({ input }),
+      signal: AbortSignal.timeout(timeoutMs),
+    }),
+  );
 
   let prediction = (await create.json()) as Prediction;
   if (!create.ok) {

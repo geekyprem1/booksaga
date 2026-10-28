@@ -15,7 +15,7 @@ import {
   type QueueName,
   type Queues,
 } from '@booksaga/core';
-import { createAi, type AiClient } from '@booksaga/ai';
+import { createAi, RateLimiter, type AiClient } from '@booksaga/ai';
 import { getServerEnv, resolveTextLlm, type ServerEnv } from '@booksaga/shared';
 import { JobRunner, loadJob } from './lib/jobs';
 import { runStuckReaper } from './cron/reaper';
@@ -243,7 +243,13 @@ async function main(): Promise<void> {
   const env = getServerEnv();
   const db = createAdminClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
   const text = resolveTextLlm(env);
+  // One quota per provider, shared by the main and the fast client (REPLICATE_RPM / TEXT_RPM).
+  const limiters = {
+    text: new RateLimiter(env.TEXT_RPM),
+    replicate: new RateLimiter(env.REPLICATE_RPM),
+  };
   const ai = createAi({
+    limiters,
     mode: env.AI_MODE,
     baseUrl: text.baseUrl,
     apiKey: text.apiKey,
@@ -261,6 +267,7 @@ async function main(): Promise<void> {
   const aiFast =
     text.fastModel && text.fastModel !== text.model
       ? createAi({
+          limiters,
           mode: env.AI_MODE,
           baseUrl: text.baseUrl,
           apiKey: text.apiKey,

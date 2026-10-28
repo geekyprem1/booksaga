@@ -6,6 +6,7 @@
  * (concat, loudnorm, MP3 encode, ACX checks) runs without spending money.
  */
 import type { SpeechRequest, SpeechResult } from './types';
+import { retryOn429 } from './limiter';
 import { AiError } from './types';
 
 export interface SpeechOptions {
@@ -55,22 +56,24 @@ export async function replicateSpeech(
   const versionId = ((await modelRes.json()) as { latest_version?: { id?: string } }).latest_version?.id;
   if (!versionId) throw new AiError('AI_UNAVAILABLE', `No version found for ${opts.model}`);
 
-  const create = await fetch(`${baseUrl}/predictions`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${opts.token}`,
-      'content-type': 'application/json',
-      Prefer: 'wait',
-    },
-    body: JSON.stringify({
-      version: versionId,
-      input: {
-        text: req.text,
-        voice: req.voice,
-        speed: req.speed ?? 1,
+  const create = await retryOn429(() =>
+    fetch(`${baseUrl}/predictions`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${opts.token}`,
+        'content-type': 'application/json',
+        Prefer: 'wait',
       },
+      body: JSON.stringify({
+        version: versionId,
+        input: {
+          text: req.text,
+          voice: req.voice,
+          speed: req.speed ?? 1,
+        },
+      }),
     }),
-  });
+  );
 
   if (!create.ok) {
     const body = await create.text().catch(() => '');

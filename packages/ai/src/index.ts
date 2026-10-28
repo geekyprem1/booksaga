@@ -17,6 +17,7 @@ import {
   textProviderName,
   type OpenRouterOptions,
 } from './openrouter';
+import { RateLimiter } from './limiter';
 import { mockImage, replicateImage, type ReplicateOptions } from './replicate';
 import { mockSpeech, replicateSpeech } from './speech';
 import {
@@ -46,6 +47,7 @@ export {
 } from './openrouter';
 export { replicateImage, mockImage } from './replicate';
 export { replicateSpeech, mockSpeech } from './speech';
+export { RateLimiter, retryOn429 } from './limiter';
 
 export interface AiClient {
   readonly mode: AiMode;
@@ -76,6 +78,12 @@ export interface CreateAiOptions {
   /** Replicate TTS (audiobooks). */
   speechModel?: string;
   speechPricePerKchar?: number;
+
+  /**
+   * Shared rate limiters. Pass the same instances to every client of one process (the main and the
+   * fast text client share one provider quota). Unset: unlimited.
+   */
+  limiters?: { text?: RateLimiter; replicate?: RateLimiter };
 }
 
 export function createAi(opts: CreateAiOptions): AiClient {
@@ -109,10 +117,13 @@ export function createAi(opts: CreateAiOptions): AiClient {
     );
   }
   const textProvider = live ? textProviderName(live.baseUrl) : 'mock';
+  const textLimiter = opts.limiters?.text ?? new RateLimiter(0);
+  const replicateLimiter = opts.limiters?.replicate ?? new RateLimiter(0);
 
   const complete = async (
     req: TextRequest & { json?: boolean },
   ): Promise<TextResult> => {
+    if (live) await textLimiter.wait();
     const result = live ? await openRouterComplete(live, req) : mockComplete(req);
     if (opts.db) {
       await logUsage(opts.db, {
@@ -137,6 +148,7 @@ export function createAi(opts: CreateAiOptions): AiClient {
     json: <S extends z.ZodTypeAny>(req: JsonRequest<S>) => completeJson(complete, req),
 
     image: async (req) => {
+      if (replicate) await replicateLimiter.wait();
       const result = replicate
         ? await replicateImage(replicate, req)
         : mockImage(req);
@@ -159,6 +171,7 @@ export function createAi(opts: CreateAiOptions): AiClient {
     },
 
     speech: async (req) => {
+      if (replicate) await replicateLimiter.wait();
       const result = replicate
         ? await replicateSpeech(
             {
