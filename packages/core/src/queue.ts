@@ -153,7 +153,7 @@ export interface EnqueueJobInput {
 }
 
 /**
- * Daily book cap (PRD ง4.3): counts the user's book jobs created since 00:00 UTC. Failed and
+ * Daily book cap (PRD ยง4.3): counts the user's book jobs created since 00:00 UTC. Failed and
  * cancelled jobs were refunded, so they do not use up the allowance.
  */
 async function assertUnderDailyBookCap(db: DbClient, userId: string, cap: number): Promise<void> {
