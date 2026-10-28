@@ -3,7 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { AppError, assertCan, resolveCreditSource } from '@booksaga/shared';
+import { AppError, assertCan, findVoice, resolveCreditSource } from '@booksaga/shared';
 import { enqueueJob } from '@booksaga/core';
 import { getAccount } from '@/lib/account';
 import { requireUser } from '@/lib/auth/session';
@@ -14,7 +14,7 @@ import { runAction, type ActionResult } from '@/lib/actions';
 
 const input = z.object({
   bookId: z.string().uuid(),
-  voice: z.string().min(2).max(40),
+  voice: z.string().refine((id) => findVoice(id) !== undefined, 'Pick one of the listed voices.'),
   speed: z.number().min(0.8).max(1.5),
 });
 

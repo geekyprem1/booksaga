@@ -109,7 +109,7 @@ export class AiSchemaError extends AiError {
 
 export interface SpeechRequest {
   text: string;
-  /** Kokoro voice id, e.g. `af_heart`. */
+  /** Kokoro voice id, e.g. `af_sarah`. */
   voice: string;
   speed?: number;
   usage: UsageContext;

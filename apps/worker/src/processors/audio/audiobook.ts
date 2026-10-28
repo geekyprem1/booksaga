@@ -15,6 +15,7 @@ import {
   masterChapter,
   probeAudio,
 } from '@booksaga/exporters';
+import { resolveVoice } from '@booksaga/shared';
 import sharp from 'sharp';
 import type { JobRunner } from '../../lib/jobs';
 
@@ -77,6 +78,7 @@ export async function processAudiobook(
   const basePath = `${data.userId}/${book.id}/audio/${data.audiobookId}`;
   const title = book.title || `Part ${book.part_number}`;
   const author = series.pen_name || 'Unknown Author';
+  const narrator = resolveVoice(data.voice);
 
   await db.from('audiobooks').update({ status: 'running' }).eq('id', data.audiobookId);
 
@@ -85,10 +87,10 @@ export async function processAudiobook(
   // Opening credits.
   if (!done.has(0)) {
     await runner.progress(3, 'Recording the opening credits');
-    const credits = cleanForSpeech(`${title}. By ${author}. Narrated by ${data.voice}.`);
+    const credits = cleanForSpeech(`${title}. By ${author}. Narrated by ${narrator.name}.`);
     const audio = await ai.speech({
       text: credits,
-      voice: data.voice,
+      voice: narrator.id,
       speed: data.speed,
       usage: { userId: data.userId, jobId: runner.jobId, purpose: 'audiobook_credits' },
     });
@@ -126,7 +128,7 @@ export async function processAudiobook(
     for (const chunk of chunks) {
       const audio = await ai.speech({
         text: chunk,
-        voice: data.voice,
+        voice: narrator.id,
         speed: data.speed,
         usage: { userId: data.userId, jobId: runner.jobId, purpose: 'audiobook_chapter' },
       });
