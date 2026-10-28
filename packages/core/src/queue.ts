@@ -139,9 +139,9 @@ export interface EnqueueJobInput {
   /** The entity the job works on (book id, series id, …). Null for user-scoped jobs. */
   refId: string | null;
   userId: string;
-  /** Whose pool is charged (agency clients charge their owner's pool). */
-  source: CreditSource;
-  action: CreditAction;
+  /** Whose pool is charged (agency clients charge their owner's pool). Required unless skipCredits. */
+  source?: CreditSource;
+  action?: CreditAction;
   amount: number;
   version?: number;
   payload?: Record<string, unknown>;
@@ -263,6 +263,9 @@ export async function enqueueJob(
 
   let ledgerId: number | null = null;
   if (!input.skipCredits) {
+    if (!input.source || !input.action) {
+      throw new Error('A charged job needs a credit source and action.');
+    }
     try {
       ledgerId = await reserveCredits(db, {
         source: input.source,

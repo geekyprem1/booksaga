@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { z } from 'zod';
 import { CancelJobButton } from '@/components/admin/cancel-job-button';
+import { RetryJobButton } from '@/components/admin/retry-job-button';
 import { Badge, Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { jobStatusVariant } from '@/lib/admin/job-status';
 import { requireAdmin } from '@/lib/auth/session';
@@ -71,6 +72,10 @@ export default async function AdminJobPage({ params }: { params: Promise<{ id: s
         {running ? (
           <span className="ml-auto">
             <CancelJobButton jobId={job.id} />
+          </span>
+        ) : job.status === 'failed' ? (
+          <span className="ml-auto">
+            <RetryJobButton jobId={job.id} />
           </span>
         ) : null}
       </div>
