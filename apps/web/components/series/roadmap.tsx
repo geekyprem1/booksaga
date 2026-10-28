@@ -14,6 +14,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { LENGTH_PRESETS, type LengthPreset } from '@booksaga/shared';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/input';
 import { JobProgressDialog } from '@/components/jobs/job-progress-dialog';
 import { getBrowserClient } from '@/lib/supabase/client';
@@ -73,6 +75,7 @@ export function Roadmap({
     null,
   );
   const [busy, setBusy] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<RoadmapPart | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [addCount, setAddCount] = useState(Math.min(2, Math.max(1, maxBooks - plannedBooks)));
 
@@ -137,6 +140,7 @@ export function Roadmap({
     setBusy(`cancel-${part.partNumber}`);
     const result = await cancelJobAction({ jobId: part.jobId });
     setBusy(null);
+    setCancelTarget(null);
     if (!result.ok) {
       setError(result.error.message);
       return;
@@ -317,7 +321,7 @@ export function Roadmap({
                     <button
                       type="button"
                       className={cn(styles.actionButton, styles.cancelButton)}
-                      onClick={() => handleCancel(part)}
+                      onClick={() => setCancelTarget(part)}
                       disabled={readOnly || busy !== null || !part.jobId}
                     >
                       Cancel
@@ -444,6 +448,34 @@ export function Roadmap({
           </div>
         )}
       </div>
+      <Dialog open={cancelTarget !== null} onOpenChange={(open) => !open && setCancelTarget(null)}>
+        <DialogContent
+          title={`Cancel Part ${cancelTarget?.partNumber ?? ''}?`}
+          description="Stopping a generation cannot be undone."
+        >
+          <ul className="mb-5 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
+            <li>Not started yet: it leaves the queue and your credits are refunded in full.</li>
+            <li>Already writing: it stops after the current chapter. Chapters already written are kept.</li>
+            <li>
+              Less than 20% of the chapters written: full refund. 20% or more: credits are kept for the
+              work done.
+            </li>
+          </ul>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setCancelTarget(null)}>
+              Keep writing
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={busy !== null}
+              onClick={() => cancelTarget && void handleCancel(cancelTarget)}
+            >
+              Cancel generation
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <JobProgressDialog
         jobId={activeJob?.jobId ?? null}
         title={activeJob?.kind === 'extend' ? 'Extending the series arc' : 'Writing the next part'}
