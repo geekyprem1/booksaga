@@ -160,6 +160,14 @@ async function handleJob(runtime: Runtime, job: Job): Promise<void> {
     return;
   }
 
+  if (job.name === 'trash_purge') {
+    await processTrashPurge(
+      { db: runtime.db },
+      { progress: async () => undefined, complete: async () => undefined },
+    );
+    return;
+  }
+
   const data = job.data as { jobId?: string };
   if (!data?.jobId) throw new Error(`Job ${job.id} is missing a jobId in its payload.`);
 

@@ -148,8 +148,34 @@ export interface EnqueueJobInput {
   reason?: string;
   /** Free jobs (re-compose, cleanup) skip the credit reservation entirely. */
   skipCredits?: boolean;
+  /** Book jobs only: max book generations per user per UTC day (entitlements.dailyBookCap). */
+  dailyBookCap?: number;
 }
 
+/**
+ * Daily book cap (PRD §4.3): counts the user's book jobs created since 00:00 UTC. Failed and
+ * cancelled jobs were refunded, so they do not use up the allowance.
+ */
+async function assertUnderDailyBookCap(db: DbClient, userId: string, cap: number): Promise<void> {
+  const startOfDay = new Date();
+  startOfDay.setUTCHours(0, 0, 0, 0);
+
+  const { count, error } = await db
+    .from('jobs')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('type', 'book')
+    .gte('created_at', startOfDay.toISOString())
+    .not('status', 'in', '(failed,cancelled)');
+  if (error) throw new Error(`Could not check the daily book limit: ${error.message}`);
+
+  if ((count ?? 0) >= cap) {
+    throw new AppError(
+      'LIMIT_REACHED',
+      `You've reached today's limit of ${cap} books. It resets at midnight UTC.`,
+    );
+  }
+}
 export interface EnqueueJobResult {
   jobId: string;
   /** True when an identical job already existed (double click) â€” nothing was charged. */
@@ -167,6 +193,10 @@ export async function enqueueJob(
   queues: Queues,
   input: EnqueueJobInput,
 ): Promise<EnqueueJobResult> {
+  if (input.type === 'book' && input.dailyBookCap !== undefined) {
+    await assertUnderDailyBookCap(db, input.userId, input.dailyBookCap);
+  }
+
   const baseKey = idempotencyKey(input.type, input.refId, input.userId, input.version ?? 1);
   let key = baseKey;
   let jobId: string | null = null;

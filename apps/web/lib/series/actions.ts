@@ -111,6 +111,7 @@ export async function createSeriesAction(
         action,
         amount: cost.credits,
         payload: { part: 1 },
+        dailyBookCap: account.entitlements.dailyBookCap,
         reason: `Generate Part 1 (${data.lengthPreset})`,
       });
 

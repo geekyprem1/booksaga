@@ -110,6 +110,7 @@ export async function generatePartAction(
         action,
         amount: cost.credits,
         payload: { part: data.partNumber },
+        dailyBookCap: account.entitlements.dailyBookCap,
         reason: `Generate Part ${data.partNumber} (${data.lengthPreset})`,
       });
 

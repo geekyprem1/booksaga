@@ -3,13 +3,13 @@
  * `system` queue. The cascade on `series` takes books, chapters, versions and bible rows with it.
  */
 import type { DbClient } from '@booksaga/core';
-import type { JobRunner } from '../../lib/jobs';
+import type { CronRunner } from './exportCleanup';
 
 const RETENTION_DAYS = 30;
 
 export async function processTrashPurge(
   deps: { db: DbClient },
-  runner: JobRunner,
+  runner: CronRunner,
 ): Promise<void> {
   const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 3600 * 1000).toISOString();
 
