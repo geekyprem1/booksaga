@@ -97,7 +97,10 @@ export async function createSeriesAction(
 
     const action = bookCreditAction(data.lengthPreset);
     const cost = await getCreditCost(action);
-    const source = resolveCreditSource({ id: user.id, parentAgencyId: user.parentAgencyId }, action);
+    const source = resolveCreditSource(
+      { id: user.id, parentAgencyId: user.parentAgencyId },
+      action,
+    );
 
     try {
       const queued = await enqueueJob(db, getQueues(), {
@@ -134,7 +137,10 @@ export async function enhanceIdeaAction(
 
     const action = 'enhance' as const;
     const cost = await getCreditCost(action);
-    const source = resolveCreditSource({ id: user.id, parentAgencyId: user.parentAgencyId }, action);
+    const source = resolveCreditSource(
+      { id: user.id, parentAgencyId: user.parentAgencyId },
+      action,
+    );
 
     const queued = await enqueueJob(getAdminDb(), getQueues(), {
       type: 'enhance',
@@ -160,7 +166,10 @@ export async function suggestIdeasAction(
     const data = suggestionsSchemaInput.parse(input);
     const action = 'enhance' as const;
     const cost = await getCreditCost(action);
-    const source = resolveCreditSource({ id: user.id, parentAgencyId: user.parentAgencyId }, action);
+    const source = resolveCreditSource(
+      { id: user.id, parentAgencyId: user.parentAgencyId },
+      action,
+    );
 
     const queued = await enqueueJob(getAdminDb(), getQueues(), {
       type: 'suggestions',
@@ -183,7 +192,9 @@ export async function getJobAction(jobId: string): Promise<ActionResult<JobSnaps
     const user = await requireUser();
     const { data, error } = await getAdminDb()
       .from('jobs')
-      .select('id, user_id, status, progress, step_label, error, ref_id, meta')
+      .select(
+        'id, user_id, type, created_at, started_at, heartbeat_at, status, progress, step_label, error, ref_id, meta',
+      )
       .eq('id', jobId)
       .maybeSingle();
 
@@ -195,6 +206,10 @@ export async function getJobAction(jobId: string): Promise<ActionResult<JobSnaps
 
     return {
       id: data.id,
+      type: data.type,
+      createdAt: data.created_at,
+      startedAt: data.started_at,
+      heartbeatAt: data.heartbeat_at,
       status: data.status as JobSnapshot['status'],
       progress: data.progress,
       stepLabel: data.step_label,

@@ -5,7 +5,7 @@
  * The print PDF is added by the same processor once the renderer lands (T5.4).
  */
 import { randomUUID } from 'node:crypto';
-import type { TiptapDoc } from '@booksaga/shared';
+import { getGenre, readableOnPaper, type TiptapDoc } from '@booksaga/shared';
 import type { DbClient } from '@booksaga/core';
 import {
   backMatter,
@@ -28,7 +28,7 @@ import {
 import type { JobRunner } from '../../lib/jobs';
 import { renderPdf } from '../../lib/pdf';
 
-export type ExportFormat = 'epub' | 'pdf' | 'docx' | 'metadata' | 'wrap';
+export type ExportFormat = 'epub' | 'pdf' | 'reader' | 'docx' | 'metadata' | 'wrap';
 
 export interface BookExportJobData {
   jobId: string;
@@ -80,7 +80,29 @@ export async function processBookExport(
   const metadata = (book.metadata ?? {}) as Record<string, string | string[]>;
   const title = book.title || `Part ${book.part_number}`;
 
+  // Every book in the series: the Reading Order page and the "Continued in…" line both need it.
+  const { data: seriesBooks } = await db
+    .from('books')
+    .select('part_number, title')
+    .eq('series_id', series.id)
+    .order('part_number');
+  const allBooks = seriesBooks ?? [];
+  const nextBook = allBooks.find((other) => other.part_number === book.part_number + 1);
+  const lastPart = Math.max(series.planned_books ?? 1, ...allBooks.map((other) => other.part_number));
+  const genre = getGenre(series.genre);
+  const genreLine = genre
+    ? genre.isFiction
+      ? `${/^[aeiou]/i.test(genre.label) ? 'An' : 'A'} ${genre.label}`
+      : genre.label
+    : null;
+  const coverPalette = ((series.cover_style ?? {}) as { palette?: string[] }).palette;
+  const accent = readableOnPaper(coverPalette?.[1] ?? coverPalette?.[0]);
+
   const matter: MatterInput = {
+    genreLine,
+    readingOrder: allBooks.map((other) => ({ partNumber: other.part_number, title: other.title || null })),
+    isFinalPart: book.part_number >= lastPart,
+    nextTitle: nextBook?.title || null,
     seriesTitle: series.title,
     bookTitle: title,
     subtitle: book.subtitle,
@@ -167,40 +189,45 @@ export async function processBookExport(
       frontHtml: front,
       backHtml: back,
       cover,
+      accent,
     });
     files.push({ name: `${slug}.epub`, buffer: epub });
   }
 
-  if (formats.includes('pdf')) {
-    await runner.progress(65, 'Typesetting the print PDF');
+  const printSettings = (series.settings ?? {}) as { trim?: TrimSize; bleed?: boolean };
+  const printChapters = chapters.map((chapter) => ({
+    number: chapter.number,
+    title: chapter.title,
+    html: chapterHtml(chapter, { heading: false }),
+  }));
 
-    const settings = (series.settings ?? {}) as { trim?: TrimSize; bleed?: boolean };
-    const trim: TrimSize = settings.trim && settings.trim in TRIM_INCHES ? settings.trim : '6x9';
-    const bleed = settings.bleed === true;
-
+  /**
+   * Typeset the interior. Margins depend on the page count, so render once, then re-render only
+   * if the margin bucket changed. `coverImage` makes it a reader PDF (cover as page 1).
+   */
+  async function typesetInterior(
+    trim: TrimSize,
+    bleed: boolean,
+    coverImage?: { buffer: Buffer; mime: string },
+  ) {
     const printInput = {
       title,
       author: matter.author,
-      seriesTitle: series.title,
-      partNumber: book.part_number,
+      seriesTitle: series!.title,
+      partNumber: book!.part_number,
       trim,
       bleed,
+      accent,
+      coverImage,
       frontHtml: front,
-      chapters: chapters.map((chapter) => ({
-        number: chapter.number,
-        title: chapter.title,
-        html: chapterHtml(chapter, { heading: false }),
-      })),
+      chapters: printChapters,
       backHtml: back,
     };
-
-    // Margins depend on the page count, so render once, then re-render only if the bucket changed.
     let geometry = printGeometry(trim, 200, bleed);
     let rendered = await renderPdf(buildPrintHtml({ ...printInput, pageCount: 200 }), {
       widthIn: geometry.pageWidth,
       heightIn: geometry.pageHeight,
     });
-
     const exact = printGeometry(trim, rendered.pages, bleed);
     if (exact.inside !== geometry.inside) {
       geometry = exact;
@@ -209,6 +236,36 @@ export async function processBookExport(
         heightIn: geometry.pageHeight,
       });
     }
+    return rendered;
+  }
+
+  if (formats.includes('reader')) {
+    await runner.progress(60, 'Typesetting the reader PDF');
+    const art = printArt
+      ? { buffer: printArt.buffer, mime: 'image/jpeg' }
+      : cover;
+    if (!art) throw new Error('This book has no cover yet — generate a cover first.');
+
+    const trim: TrimSize =
+      printSettings.trim && printSettings.trim in TRIM_INCHES ? printSettings.trim : '6x9';
+    // The reader copy never needs bleed; the cover fills the trimmed page.
+    const rendered = await typesetInterior(trim, false, art);
+    files.push({ name: `${slug}-reader.pdf`, buffer: rendered.buffer });
+    const readerPath = `${basePath}-reader.pdf`;
+    const readerUpload = await db.storage
+      .from('exports')
+      .upload(readerPath, rendered.buffer, { contentType: 'application/pdf', upsert: true });
+    if (!readerUpload.error) uploaded.reader = readerPath;
+  }
+
+  if (formats.includes('pdf')) {
+    await runner.progress(65, 'Typesetting the print PDF');
+
+    const trim: TrimSize =
+      printSettings.trim && printSettings.trim in TRIM_INCHES ? printSettings.trim : '6x9';
+    const bleed = printSettings.bleed === true;
+
+    const rendered = await typesetInterior(trim, bleed);
 
     pdfPages = rendered.pages;
     files.push({ name: `${slug}-print.pdf`, buffer: rendered.buffer });

@@ -99,7 +99,7 @@ export async function applyLibraryImageAction(
       type: 'cover',
       refId: book.id,
       userId: user.id,
-      source: { ownerId: user.id, pool: 'main', actingUserId: user.id },
+      source: { ownerId: user.id, pool: 'main' },
       action: 'cover',
       amount: 0,
       skipCredits: true,

@@ -67,7 +67,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="app-backdrop min-h-dvh">
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col gap-6 overflow-y-auto border-r border-border bg-background/70 p-4 backdrop-blur lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col gap-6 overflow-y-auto border-r border-border bg-background p-4 lg:flex">
         <div className="px-2 pt-1">
           <Logo name={app.name} />
         </div>
@@ -83,7 +83,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           avatarUrl={avatarUrl}
           unread={unread ?? 0}
         />
-        <main className="mx-auto w-full max-w-7xl p-4 lg:p-8">{children}</main>
+        <main className="w-full min-w-0 p-4 lg:p-6">{children}</main>
       </div>
 
       <CommandPalette />

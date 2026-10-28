@@ -12,7 +12,7 @@ import { runAction, type ActionResult } from '@/lib/actions';
 
 const input = z.object({
   bookId: z.string().uuid(),
-  formats: z.array(z.enum(['epub', 'pdf', 'docx', 'metadata', 'wrap'])).min(1).max(5),
+  formats: z.array(z.enum(['epub', 'pdf', 'reader', 'docx', 'metadata', 'wrap'])).min(1).max(6),
 });
 
 /** Export a book (T5.7). Re-exports are free — no AI work happens. */
@@ -55,7 +55,7 @@ export async function exportBookAction(
       type: 'export_book',
       refId: book.id,
       userId: user.id,
-      source: { ownerId: user.id, pool: 'main', actingUserId: user.id },
+      source: { ownerId: user.id, pool: 'main' },
       action: 'metadata',
       amount: 0,
       skipCredits: true,

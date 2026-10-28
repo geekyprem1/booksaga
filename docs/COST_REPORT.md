@@ -108,3 +108,19 @@ failed book.
 - A book with `autoCovers` on, once M4 lands (image cost is separate: gpt-image-2 `low`).
 - Audiobook cost per book (M6): Kokoro TTS + ffmpeg.
 - Re-check after switching extract/continuity to a fast model.
+
+## 7. Cover image policy — published rate, not a measured invoice
+
+As of 24 Oct 2026, covers are fixed to **OpenAI GPT Image 2, low quality** through Replicate.
+Neither environment settings nor a request can upgrade image quality to medium/high/auto.
+
+The [provider's published pricing](https://replicate.com/openai/gpt-image-2#pricing) is
+**$0.012 per low-quality output image**, approximately **$0.12 for ten template covers**.
+The user's target is about $0.01 per cover; the $0.12 ten-cover batch was explicitly approved.
+`ImageResult.costUsd` and image usage-log rows use the published estimate because this provider
+does not return the actual invoice cost in a prediction response.
+
+Native generation is portrait 1024×1536 for covers. Template covers generate artwork and lettering
+together in AI Text Mode; Sharp only resizes the finished image to a 1600×2560 JPEG, without adding
+engine-rendered text. Normal book covers still follow the author's chosen AI/overlay mode.
+Upscaling and JPEG encoding do not change the requested AI quality tier or incur another AI generation.

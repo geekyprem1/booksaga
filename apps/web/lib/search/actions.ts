@@ -68,11 +68,26 @@ export async function searchAction(query: string): Promise<ActionResult<SearchRe
       .or(`title.ilike.${like},premise.ilike.${like}`)
       .limit(6);
 
-    const { data: chapterRows } = await db
-      .from('chapters')
-      .select('id, title, number, book_id, book:book_id(id, title, series_id)')
-      .or(`title.ilike.${like},content_text.ilike.${like}`)
-      .limit(8);
+    // Chapter text is the one search that could cross tenants: restrict it to the user's books
+    // BEFORE the limit. Filtering after the query lets other users' matching chapters fill the
+    // limit and silently crowd the caller's own results out.
+    const { data: ownedBookRows } = await db
+      .from('books')
+      .select('id')
+      .in('series_id', ownedIds);
+    const ownedBookIds = (ownedBookRows ?? []).map((row) => row.id);
+
+    const chapterRows =
+      ownedBookIds.length > 0
+        ? (
+            await db
+              .from('chapters')
+              .select('id, title, number, book_id, book:book_id(id, title, series_id)')
+              .in('book_id', ownedBookIds)
+              .or(`title.ilike.${like},content_text.ilike.${like}`)
+              .limit(8)
+          ).data
+        : null;
 
     const ownedSet = new Set(ownedIds);
     const chapters = (chapterRows ?? []).filter((row) => {

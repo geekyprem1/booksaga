@@ -4,6 +4,10 @@ import { Badge, Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/input';
 import { SeriesCardActions } from '@/components/series/series-card-actions';
+import { Roadmap, type RoadmapPart } from '@/components/series/roadmap';
+import type { LengthPreset } from '@booksaga/shared';
+import { getAccount } from '@/lib/account';
+import { getCreditCosts } from '@/lib/credits';
 import { requireUser } from '@/lib/auth/session';
 import { getAdminDb } from '@/lib/supabase/admin';
 import { formatNumber } from '@/lib/utils';
@@ -14,7 +18,10 @@ export const dynamic = 'force-dynamic';
 const STATUSES = ['draft', 'active', 'completed', 'archived'] as const;
 
 function sanitize(value: string): string {
-  return value.replace(/[,()*%\\"']/g, ' ').trim().slice(0, 80);
+  return value
+    .replace(/[,()*%\\"']/g, ' ')
+    .trim()
+    .slice(0, 80);
 }
 
 export default async function MySeriesPage({
@@ -39,7 +46,6 @@ export default async function MySeriesPage({
     : undefined;
   const genre = sanitize(params.genre ?? '');
   const sort = params.sort === 'name' ? 'name' : 'recent';
-  const view = params.view === 'list' ? 'list' : 'grid';
   const trash = params.trash === '1';
 
   let query = db.from('series').select('*').eq('user_id', user.id);
@@ -56,9 +62,79 @@ export default async function MySeriesPage({
   const list = series ?? [];
   const ids = list.map((s) => s.id);
 
-  const { data: books } = ids.length
-    ? await db.from('books').select('series_id, status, word_count').in('series_id', ids)
-    : { data: [] as { series_id: string; status: string; word_count: number | null }[] };
+  const [{ data: books }, { account }, creditCosts] = await Promise.all([
+    ids.length
+      ? db
+          .from('books')
+          .select('id, series_id, part_number, title, premise, status, length_preset, word_count')
+          .in('series_id', ids)
+          .order('part_number')
+      : Promise.resolve({ data: [] }),
+    getAccount(),
+    getCreditCosts(['book_short', 'book_standard', 'book_full']),
+  ]);
+  const bookIds = (books ?? []).map((book) => book.id);
+  const [{ data: covers }, { data: chapters }, { data: jobs }] = await Promise.all([
+    bookIds.length
+      ? db
+          .from('covers')
+          .select('book_id, final_path')
+          .in('book_id', bookIds)
+          .eq('type', 'ebook')
+          .eq('is_active', true)
+      : Promise.resolve({ data: [] }),
+    bookIds.length
+      ? db.from('chapters').select('book_id').in('book_id', bookIds)
+      : Promise.resolve({ data: [] }),
+    bookIds.length
+      ? db
+          .from('jobs')
+          .select('id, ref_id, status, progress, step_label')
+          .in('ref_id', bookIds)
+          .in('status', ['queued', 'active'])
+      : Promise.resolve({ data: [] }),
+  ]);
+  const coverUrls = new Map<string, string>();
+  await Promise.all(
+    (covers ?? []).map(async (cover) => {
+      if (!cover.final_path) return;
+      const { data } = await db.storage.from('covers').createSignedUrl(cover.final_path, 3600);
+      if (data?.signedUrl) coverUrls.set(cover.book_id, data.signedUrl);
+    }),
+  );
+  const chapterCounts = new Map<string, number>();
+  for (const chapter of chapters ?? [])
+    chapterCounts.set(chapter.book_id, (chapterCounts.get(chapter.book_id) ?? 0) + 1);
+  const activeJobs = new Map(
+    (jobs ?? []).filter((job) => job.ref_id).map((job) => [job.ref_id!, job]),
+  );
+  const partsBySeries = new Map<string, RoadmapPart[]>();
+  for (const book of books ?? []) {
+    const job = activeJobs.get(book.id);
+    const parts = partsBySeries.get(book.series_id) ?? [];
+    parts.push({
+      id: book.id,
+      partNumber: book.part_number,
+      title: book.title,
+      premise: book.premise,
+      status: book.status as RoadmapPart['status'],
+      jobStatus: (job?.status as 'queued' | 'active' | undefined) ?? null,
+      lengthPreset: book.length_preset as LengthPreset,
+      wordCount: book.word_count ?? 0,
+      chapterCount: chapterCounts.get(book.id) ?? 0,
+      jobId: job?.id ?? null,
+      jobProgress: job?.progress ?? 0,
+      jobStep: job?.step_label ?? null,
+      coverUrl: coverUrls.get(book.id) ?? null,
+    });
+    partsBySeries.set(book.series_id, parts);
+  }
+  const costs: Record<LengthPreset, number> = {
+    short: creditCosts.book_short?.credits ?? 10,
+    standard: creditCosts.book_standard?.credits ?? 20,
+    full: creditCosts.book_full?.credits ?? 35,
+  };
+  const credits = account.isAgencyClient ? account.balances.agency : account.balances.main;
 
   const bySeries = new Map<string, { written: number; total: number; words: number }>();
   for (const book of books ?? []) {
@@ -77,14 +153,6 @@ export default async function MySeriesPage({
     .eq('user_id', user.id)
     .is('deleted_at', null);
   const genres = [...new Set((allSeries ?? []).map((s) => s.genre))].sort();
-
-  const qs = (patch: Record<string, string | undefined>) => {
-    const next = new URLSearchParams();
-    const merged = { q, status, genre, sort, view, trash: trash ? '1' : undefined, ...patch };
-    for (const [key, value] of Object.entries(merged)) if (value) next.set(key, value);
-    const s = next.toString();
-    return s ? `/my-series?${s}` : '/my-series';
-  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -112,7 +180,6 @@ export default async function MySeriesPage({
       </header>
 
       <form method="get" className="flex flex-wrap items-end gap-2">
-        <input type="hidden" name="view" value={view} />
         {trash ? <input type="hidden" name="trash" value="1" /> : null}
         <div className="relative min-w-56 flex-1">
           <Search
@@ -150,22 +217,6 @@ export default async function MySeriesPage({
         <Button type="submit" variant="secondary">
           Apply
         </Button>
-        <div className="flex overflow-hidden rounded-lg border border-border">
-          <Link
-            href={qs({ view: 'grid' })}
-            aria-current={view === 'grid' ? 'true' : undefined}
-            className={`px-3 py-2 text-xs ${view === 'grid' ? 'bg-muted text-foreground' : 'text-muted-foreground'}`}
-          >
-            Grid
-          </Link>
-          <Link
-            href={qs({ view: 'list' })}
-            aria-current={view === 'list' ? 'true' : undefined}
-            className={`px-3 py-2 text-xs ${view === 'list' ? 'bg-muted text-foreground' : 'text-muted-foreground'}`}
-          >
-            List
-          </Link>
-        </div>
       </form>
 
       {list.length === 0 ? (
@@ -186,28 +237,20 @@ export default async function MySeriesPage({
           </CardContent>
         </Card>
       ) : (
-        <div
-          className={
-            view === 'grid'
-              ? 'grid gap-4 sm:grid-cols-2 xl:grid-cols-3'
-              : 'flex flex-col gap-3'
-          }
-        >
+        <div className="flex min-w-0 flex-col gap-4">
           {list.map((item) => {
             const stats = bySeries.get(item.id) ?? { written: 0, total: 0, words: 0 };
             return (
-              <Card key={item.id} className={view === 'list' ? 'p-1' : undefined}>
-                <CardContent
-                  className={
-                    view === 'list'
-                      ? 'flex flex-wrap items-center justify-between gap-4 p-3'
-                      : 'flex h-full flex-col gap-3 p-4'
-                  }
-                >
+              <article
+                key={item.id}
+                aria-label={`Series: ${item.title}`}
+                className="min-w-0 rounded-xl border border-border bg-card/40 p-3"
+              >
+                <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <Link
                       href={`/series/${item.id}`}
-                      className="text-lg font-bold hover:underline"
+                      className="text-base font-bold hover:underline"
                     >
                       {item.title}
                     </Link>
@@ -233,23 +276,27 @@ export default async function MySeriesPage({
                         <Badge variant="muted">{formatNumber(stats.words)} words</Badge>
                       ) : null}
                     </div>
-                    {view === 'grid' ? (
-                      <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{item.idea}</p>
-                    ) : null}
                   </div>
 
                   <div className="flex shrink-0 items-center gap-2">
                     <Button asChild size="sm" variant="secondary">
                       <Link href={`/series/${item.id}`}>Open</Link>
                     </Button>
-                    <SeriesCardActions
-                      seriesId={item.id}
-                      status={item.status}
-                      inTrash={trash}
-                    />
+                    <SeriesCardActions seriesId={item.id} status={item.status} inTrash={trash} />
                   </div>
-                </CardContent>
-              </Card>
+                </header>
+                <Roadmap
+                  seriesId={item.id}
+                  parts={partsBySeries.get(item.id) ?? []}
+                  credits={credits}
+                  costs={costs}
+                  allowedPresets={account.entitlements.lengthPresets as LengthPreset[]}
+                  plannedBooks={item.planned_books}
+                  maxBooks={account.entitlements.maxBooksPerSeries}
+                  genre={item.genre}
+                  readOnly={trash}
+                />
+              </article>
             );
           })}
         </div>

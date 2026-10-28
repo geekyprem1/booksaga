@@ -142,8 +142,8 @@ export async function processCover(
       palette: style.palette,
       scene: style.scene,
       genre: series.genre,
-      title: book.title,
-      author: series.pen_name,
+      title: book.title || `Part ${book.part_number}`,
+      author: series.pen_name || 'Unknown Author',
       textMode: data.textMode ?? 'overlay',
     });
 
@@ -221,7 +221,7 @@ export async function processCover(
       type: 'ebook',
       art_path: artPath,
       final_path: ebookPath,
-      mode: 'overlay',
+      mode: data.textMode === 'ai' ? 'ai_text' : 'overlay',
       prompt,
       is_active: true,
       layers: asJson({
@@ -283,7 +283,16 @@ async function recomposeCover(
   if (art.error || !art.data) throw new Error('Could not read the artwork.');
   const artBuffer = Buffer.from(await art.data.arrayBuffer());
 
-  const meta = (cover.layers ?? {}) as { fontFamily?: 'serif' | 'sans' | 'display' };
+  const meta = (cover.layers ?? {}) as {
+    fontFamily?: 'serif' | 'sans' | 'display';
+    textMode?: 'overlay' | 'ai';
+  };
+
+  // AI-lettered art already contains the title and author. Compositing the stored layers again
+  // would print both a second time, so recompose is only valid for engine-composed covers.
+  if (meta.textMode === 'ai') {
+    throw new Error('This cover was lettered by the AI, so its text cannot be recomposed.');
+  }
 
   const [ebook, print] = await Promise.all([
     composeCover({

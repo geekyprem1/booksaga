@@ -1,3 +1,4 @@
+export * from './color';
 export * from './credits';
 export * from './entitlements';
 export * from './env';

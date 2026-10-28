@@ -1,20 +1,37 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Coins, Loader2, Plus, Sparkles, Wand2 } from 'lucide-react';
 import {
-  GENRES,
-  LENGTH_PRESETS,
-  type LengthPreset,
-  type Suggestions,
-} from '@booksaga/shared';
-import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+  BookOpen,
+  BookText,
+  Check,
+  ChevronDown,
+  Coins,
+  Library,
+  Loader2,
+  LockKeyhole,
+  PenLine,
+  Plus,
+  ShieldCheck,
+  Sparkles,
+  Wand2,
+} from 'lucide-react';
+import { GENRES, LENGTH_PRESETS, type LengthPreset, type Suggestions } from '@booksaga/shared';
+import {
+  Badge,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input, Label, Select } from '@/components/ui/input';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { JobProgressDialog } from '@/components/jobs/job-progress-dialog';
+import { useJob } from '@/components/jobs/use-job';
 import { createSeriesAction, enhanceIdeaAction, suggestIdeasAction } from '@/lib/series/actions';
 import {
   AUDIENCES,
@@ -24,6 +41,8 @@ import {
   type JobSnapshot,
   type SeriesSettings,
 } from '@/lib/series/validation';
+import { cn } from '@/lib/utils';
+import styles from './create-series.module.css';
 
 export interface CreateSeriesFormProps {
   penNames: string[];
@@ -31,6 +50,7 @@ export interface CreateSeriesFormProps {
   costs: { short: number; standard: number; full: number; enhance: number };
   lengthPresets: LengthPreset[];
   maxBooksPerSeries: number;
+  initialGeneration?: { jobId: string; seriesId: string } | null;
   /** Prefill from a template or DFY idea. */
   defaults?: {
     idea?: string;
@@ -50,6 +70,7 @@ export function CreateSeriesForm({
   lengthPresets,
   maxBooksPerSeries,
   defaults,
+  initialGeneration,
 }: CreateSeriesFormProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -78,7 +99,11 @@ export function CreateSeriesForm({
 
   const [error, setError] = useState<string | null>(null);
   const [enhanceJob, setEnhanceJob] = useState<string | null>(null);
-  const [generateJob, setGenerateJob] = useState<{ jobId: string; seriesId: string } | null>(null);
+  const [generateJob, setGenerateJob] = useState(initialGeneration ?? null);
+  const [generationOpen, setGenerationOpen] = useState(Boolean(initialGeneration));
+  const generationTracking = useJob(generateJob?.jobId ?? null);
+  const generation = generationTracking.job;
+  const settledGeneration = useRef<string | null>(null);
   const [enhanced, setEnhanced] = useState<{
     concept: string;
     titles: string[];
@@ -91,6 +116,27 @@ export function CreateSeriesForm({
   const bookCost = costs[lengthPreset] ?? costs.short;
   const canAfford = credits >= bookCost;
   const maxPlanned = Math.min(12, maxBooksPerSeries);
+  const generationTerminal =
+    generation?.status === 'completed' ||
+    generation?.status === 'failed' ||
+    generation?.status === 'cancelled';
+  const generationPending = Boolean(generateJob) && !generationTerminal;
+  const generationProgress = Math.min(100, Math.max(0, generation?.progress ?? 0));
+  const chaptersDone =
+    typeof generation?.meta.chaptersDone === 'number' ? generation.meta.chaptersDone : null;
+  const chaptersTotal =
+    typeof generation?.meta.chaptersTotal === 'number' ? generation.meta.chaptersTotal : null;
+  const chapterNumber =
+    typeof generation?.meta.chapterNumber === 'number' ? generation.meta.chapterNumber : null;
+
+  useEffect(() => {
+    if (!generateJob || !generation || generation.status !== 'completed') return;
+    if (settledGeneration.current === generation.id) return;
+    settledGeneration.current = generation.id;
+    setGenerationOpen(false);
+    setSuccess(generateJob.seriesId);
+    router.refresh();
+  }, [generateJob, generation, router]);
 
   const lengthOptions = useMemo(
     () =>
@@ -128,6 +174,11 @@ export function CreateSeriesForm({
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (pending) return;
+    if (generateJob) {
+      setGenerationOpen(true);
+      return;
+    }
     setError(null);
 
     const payload: CreateSeriesInput = {
@@ -150,6 +201,7 @@ export function CreateSeriesForm({
         return;
       }
       setGenerateJob({ jobId: result.data.jobId, seriesId: result.data.seriesId });
+      setGenerationOpen(true);
     });
   }
 
@@ -160,8 +212,7 @@ export function CreateSeriesForm({
       return;
     }
     const result = job.meta.result as
-      | { concept: string; titles: string[]; tone: string }
-      | undefined;
+      { concept: string; titles: string[]; tone: string } | undefined;
     if (result) setEnhanced(result);
   }
 
@@ -172,30 +223,105 @@ export function CreateSeriesForm({
     if (result?.suggestions) setSuggestions(result.suggestions);
   }
 
-  function onGenerateSettled(job: JobSnapshot) {
-    if (job.status === 'completed' && generateJob) {
-      setSuccess(generateJob.seriesId);
-      router.refresh();
-    }
+  function closeGeneration() {
+    setGenerationOpen(false);
+    if (generationTerminal) setGenerateJob(null);
   }
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="flex flex-col gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Your series idea</CardTitle>
-              <CardDescription>
-                One idea becomes a connected series: same cast, same world, a cliffhanger per book.
-              </CardDescription>
+      {generateJob ? (
+        <Card className={cn(styles.panel, 'mb-6')}>
+          <CardHeader>
+            <CardTitle>
+              {generation?.status === 'completed'
+                ? 'Part 1 is ready'
+                : generation?.status === 'failed'
+                  ? 'Book generation failed'
+                  : generation?.status === 'cancelled'
+                    ? 'Book generation cancelled'
+                    : generation?.status === 'queued'
+                      ? 'Your book is queued'
+                      : generation?.status === 'active'
+                        ? `Writing your book · ${generationProgress}%`
+                        : 'Loading your book progress'}
+            </CardTitle>
+            <CardDescription aria-live="polite">
+              {generation?.status === 'queued'
+                ? 'Waiting for the writing worker. You can close progress or leave this page without losing your place.'
+                : generation?.status === 'failed'
+                  ? (generation.error ??
+                    'Generation stopped. Dismiss this update to start a new request.')
+                  : generation?.status === 'cancelled'
+                    ? 'Generation has stopped. Dismiss this update to start a new request.'
+                    : generation?.status === 'completed'
+                      ? 'Your series bible and Part 1 are saved. Open your roadmap to continue.'
+                      : (generation?.stepLabel ?? 'Retrieving the latest saved progress.')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {generation?.status === 'active' ? (
+              <>
+                <progress
+                  className="h-2 w-full accent-violet-400"
+                  max={100}
+                  value={generationProgress}
+                  aria-label="Book generation progress"
+                />
+                {chaptersDone !== null && chaptersTotal !== null ? (
+                  <p className="text-sm text-muted-foreground">
+                    {chaptersDone} of {chaptersTotal} chapters saved
+                    {chapterNumber !== null && chapterNumber > chaptersDone
+                      ? ` · Writing chapter ${chapterNumber}`
+                      : ''}
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+            {generationTracking.error ? (
+              <p role="alert" className="text-sm text-amber-300">
+                {generationTracking.error} Your request is still tracked; do not generate it again.
+              </p>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" onClick={() => setGenerationOpen(true)}>
+                View progress
+              </Button>
+              <Button variant="secondary" asChild>
+                <Link href={`/series/${generateJob.seriesId}`}>View roadmap</Link>
+              </Button>
+              {generationTerminal ? (
+                <Button type="button" variant="ghost" onClick={closeGeneration}>
+                  Dismiss update
+                </Button>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+      <form onSubmit={handleSubmit} className={styles.form}>
+        <div className={styles.formMain}>
+          <Card className={styles.panel}>
+            <CardHeader className={styles.panelHeader}>
+              <div className={styles.sectionHeading}>
+                <span className={styles.sectionNumber} aria-hidden="true">
+                  01
+                </span>
+                <div>
+                  <CardTitle>Your series idea</CardTitle>
+                  <CardDescription>
+                    Set the direction. Your story and style carry through every book.
+                  </CardDescription>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent className="flex flex-col gap-4">
+            <CardContent className={styles.panelContent}>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="idea">Series idea / concept *</Label>
                 <textarea
                   id="idea"
                   required
+                  aria-describedby="idea-help idea-count"
                   minLength={40}
                   maxLength={2000}
                   rows={5}
@@ -204,10 +330,13 @@ export function CreateSeriesForm({
                   placeholder="A harbour city where debts are inherited like weather. When a reclusive bookkeeper dies, her estranged niece inherits a ledger that proves half the city's founding families bought their reputations…"
                   className="w-full resize-y rounded-lg border border-input bg-background/60 p-3 text-sm placeholder:text-muted-foreground/60 focus-visible:border-ring"
                 />
-                <p className="text-xs text-muted-foreground">{idea.length} / 2000</p>
+                <div className={styles.ideaMeta}>
+                  <span id="idea-help">A setting, a central idea, and what happens next.</span>
+                  <span id="idea-count">{idea.length} / 2000</span>
+                </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className={styles.fields}>
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="title">Series title *</Label>
                   <Input
@@ -236,7 +365,7 @@ export function CreateSeriesForm({
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className={styles.fields}>
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="genre">Genre *</Label>
                   <Select id="genre" value={genre} onChange={(e) => setGenre(e.target.value)}>
@@ -272,7 +401,7 @@ export function CreateSeriesForm({
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className={styles.fields}>
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="tone">Tone / writing style</Label>
                   <Select id="tone" value={tone} onChange={(e) => setTone(e.target.value)}>
@@ -301,11 +430,18 @@ export function CreateSeriesForm({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex-row items-center justify-between">
-              <div>
-                <CardTitle>Book 1 &amp; publishing settings</CardTitle>
-                <CardDescription>Applies to the whole series; editable later.</CardDescription>
+          <Card className={styles.panel}>
+            <CardHeader className={styles.panelHeader}>
+              <div className={styles.sectionHeading}>
+                <span className={styles.sectionNumber} aria-hidden="true">
+                  02
+                </span>
+                <div>
+                  <CardTitle>Book 1 &amp; publishing settings</CardTitle>
+                  <CardDescription>
+                    Choose your book length. Refine the publishing details when you&apos;re ready.
+                  </CardDescription>
+                </div>
               </div>
               <Button
                 type="button"
@@ -313,26 +449,25 @@ export function CreateSeriesForm({
                 size="sm"
                 onClick={() => setAdvancedOpen((v) => !v)}
                 aria-expanded={advancedOpen}
+                aria-controls="publishing-options"
+                className={styles.detailsButton}
               >
-                {advancedOpen ? 'Hide' : 'Show'}
+                {advancedOpen ? 'Hide details' : 'More settings'} <ChevronDown aria-hidden="true" />
               </Button>
             </CardHeader>
 
-            <CardContent className="flex flex-col gap-4">
-              <fieldset className="flex flex-col gap-2">
-                <legend className="mb-1 text-sm font-medium">Book length</legend>
-                <div className="grid gap-2 sm:grid-cols-3">
+            <CardContent className={styles.panelContent}>
+              <fieldset>
+                <legend className={styles.lengthLegend}>Book length</legend>
+                <div className={styles.lengthGrid}>
                   {lengthOptions.map((option) => (
                     <label
                       key={option.key}
-                      className={[
-                        'flex cursor-pointer flex-col gap-1 rounded-xl border p-3 text-sm transition',
-                        option.locked
-                          ? 'cursor-not-allowed border-border/60 opacity-50'
-                          : lengthPreset === option.key
-                            ? 'border-primary bg-primary/10'
-                            : 'border-border hover:bg-muted/40',
-                      ].join(' ')}
+                      className={cn(
+                        styles.lengthChoice,
+                        option.locked && styles.lockedLength,
+                        !option.locked && lengthPreset === option.key && styles.selectedLength,
+                      )}
                     >
                       <input
                         type="radio"
@@ -343,11 +478,27 @@ export function CreateSeriesForm({
                         disabled={option.locked}
                         onChange={() => setLengthPreset(option.key)}
                       />
-                      <span className="flex items-center justify-between font-semibold">
-                        {option.label}
-                        <Badge variant="muted">{option.cost} cr</Badge>
+                      <span className={styles.lengthTop}>
+                        <span className={styles.lengthIcon}>
+                          {option.locked ? (
+                            <LockKeyhole aria-hidden="true" />
+                          ) : option.key === 'short' ? (
+                            <BookText aria-hidden="true" />
+                          ) : option.key === 'standard' ? (
+                            <BookOpen aria-hidden="true" />
+                          ) : (
+                            <Library aria-hidden="true" />
+                          )}
+                        </span>
+                        {!option.locked && lengthPreset === option.key && (
+                          <Check className={styles.lengthCheck} aria-hidden="true" />
+                        )}
                       </span>
-                      <span className="text-xs text-muted-foreground">{option.description}</span>
+                      <span className={styles.lengthName}>
+                        {option.label}
+                        <span className={styles.lengthCost}>{option.cost} cr</span>
+                      </span>
+                      <span className={styles.lengthDescription}>{option.description}</span>
                       {option.locked ? (
                         <span className="text-xs text-amber-300">Upgrade to unlock</span>
                       ) : null}
@@ -357,7 +508,7 @@ export function CreateSeriesForm({
               </fieldset>
 
               {advancedOpen ? (
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div id="publishing-options" className={cn(styles.fields, styles.advancedFields)}>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="bookTitle">Book 1 title (optional)</Label>
                     <Input
@@ -442,29 +593,40 @@ export function CreateSeriesForm({
           </Card>
 
           {error ? (
-            <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-rose-200">
+            <p
+              role="alert"
+              className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-rose-200"
+            >
               {error}
             </p>
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Button type="submit" size="lg" disabled={pending || !canAfford}>
-              {pending ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Wand2 aria-hidden="true" />}
-              Generate Part 1 · {bookCost} credits
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="lg"
-              onClick={handleEnhance}
-              disabled={pending || idea.trim().length < 20}
-            >
-              <Sparkles aria-hidden="true" /> Enhance with AI · {costs.enhance} credit
-            </Button>
-            <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Coins className="size-4 text-amber" aria-hidden="true" />
-              {credits} credits available
-            </span>
+          <div className={styles.submitBar}>
+            <div className={styles.submitCopy}>
+              <ShieldCheck aria-hidden="true" />
+              <div>
+                <strong>Start with Book 1</strong>
+                <p>The rest of your series unlocks as you write.</p>
+              </div>
+            </div>
+            {generationPending ? (
+              <Button type="button" size="lg" onClick={() => setGenerationOpen(true)}>
+                <BookOpen aria-hidden="true" /> View progress
+              </Button>
+            ) : (
+              <Button
+                type="submit"
+                size="lg"
+                disabled={pending || !canAfford || Boolean(generateJob)}
+              >
+                {pending ? (
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <Wand2 aria-hidden="true" />
+                )}
+                Generate Part 1 · {bookCost} credits
+              </Button>
+            )}
           </div>
           {!canAfford ? (
             <p className="text-sm text-amber-300">
@@ -473,22 +635,59 @@ export function CreateSeriesForm({
           ) : null}
         </div>
 
-        <aside className="flex flex-col gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Sparkles className="size-4 text-violet-300" aria-hidden="true" /> AI Assistant &amp; Tools
+        <aside className={styles.aside} aria-label="Series summary and AI tools">
+          <Card className={cn(styles.panel, styles.summary)}>
+            <p className={styles.summaryEyebrow}>
+              <BookOpen aria-hidden="true" /> Your series at a glance
+            </p>
+            <h3>{title.trim() || 'Untitled series'}</h3>
+            <p className={styles.summaryAuthor}>
+              {penName.trim() ? `by ${penName.trim()}` : 'Add your author name'}
+            </p>
+            <dl>
+              <div>
+                <dt>Genre</dt>
+                <dd>{GENRES.find((item) => item.id === genre)?.label ?? genre}</dd>
+              </div>
+              <div>
+                <dt>Planned books</dt>
+                <dd>{plannedBooks || '—'} books</dd>
+              </div>
+              <div>
+                <dt>Book length</dt>
+                <dd>{LENGTH_PRESETS[lengthPreset].label}</dd>
+              </div>
+            </dl>
+            <div className={styles.wallet}>
+              <Coins aria-hidden="true" />
+              <span>
+                <strong>{credits.toLocaleString('en-US')}</strong> credits available
+              </span>
+            </div>
+          </Card>
+          <Card className={styles.panel}>
+            <CardHeader className={styles.assistantHeader}>
+              <CardTitle>
+                <Sparkles aria-hidden="true" /> Your creative assistant
               </CardTitle>
-              <CardDescription>Story ideas, covers and continuity.</CardDescription>
+              <CardDescription>A little inspiration, without leaving your draft.</CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-3">
+            <CardContent className={styles.assistantContent}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleEnhance}
+                disabled={pending || idea.trim().length < 20}
+              >
+                <Wand2 aria-hidden="true" /> Enhance with AI · {costs.enhance} credit
+              </Button>
               <Button
                 type="button"
                 variant="secondary"
                 size="sm"
                 onClick={handleSuggestions}
                 disabled={pending || idea.trim().length < 10}
-                className="justify-start"
+                className={styles.suggestionsButton}
               >
                 <Sparkles aria-hidden="true" /> AI suggestions
               </Button>
@@ -507,7 +706,7 @@ export function CreateSeriesForm({
                 </ul>
               ) : null}
 
-              <label className="flex items-start gap-2 rounded-lg border border-border/70 p-3 text-sm">
+              <label className={styles.autoCover}>
                 <input
                   type="checkbox"
                   className="mt-0.5"
@@ -516,20 +715,31 @@ export function CreateSeriesForm({
                 />
                 <span>
                   Auto-generate covers
-                  <span className="block text-xs text-muted-foreground">
-                    A matching cover after each book (2 credits per cover).
-                  </span>
+                  <small>A matching cover after each book (2 credits per cover).</small>
                 </span>
               </label>
-
-              <div className="rounded-lg border border-border/70 p-3 text-xs text-muted-foreground">
-                Series Continuity and Publishing Structure unlock with the roadmap (M3).
-              </div>
             </CardContent>
+          </Card>
+          <Card className={cn(styles.panel, styles.nextSteps)}>
+            <strong>What happens next</strong>
+            <ol>
+              <li>
+                <PenLine aria-hidden="true" />
+                <span>Plan your series and build its shared bible.</span>
+              </li>
+              <li>
+                <BookOpen aria-hidden="true" />
+                <span>Write the outline and chapters of Book 1.</span>
+              </li>
+              <li>
+                <Library aria-hidden="true" />
+                <span>Open your roadmap and continue the series.</span>
+              </li>
+            </ol>
           </Card>
 
           {enhanced ? (
-            <Card>
+            <Card className={styles.panel}>
               <CardHeader>
                 <CardTitle>Enhanced concept</CardTitle>
                 <CardDescription>Use it as-is or keep editing.</CardDescription>
@@ -575,11 +785,11 @@ export function CreateSeriesForm({
       />
 
       <JobProgressDialog
-        jobId={generateJob?.jobId ?? null}
+        jobId={generationOpen ? (generateJob?.jobId ?? null) : null}
+        tracking={generationTracking}
         title="Writing your series"
         description="Series plan, bible, outline and every chapter of Part 1."
-        onClose={() => setGenerateJob(null)}
-        onSettled={onGenerateSettled}
+        onClose={closeGeneration}
       />
 
       <Dialog
@@ -597,7 +807,13 @@ export function CreateSeriesForm({
                 <Link href={`/series/${success}`}>View series</Link>
               </Button>
               <Button variant="secondary" asChild>
-                <Link href="/create-series">
+                <Link
+                  href="/create-series"
+                  onClick={() => {
+                    setSuccess(null);
+                    setGenerateJob(null);
+                  }}
+                >
                   <Plus aria-hidden="true" /> New series
                 </Link>
               </Button>

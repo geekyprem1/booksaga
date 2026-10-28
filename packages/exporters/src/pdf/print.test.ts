@@ -45,7 +45,7 @@ describe('print layout', () => {
 
     expect(html).toContain('@page :left');
     expect(html).toContain('@page :right');
-    expect(html).toContain('page-break-before: right');
+    expect(html).toContain('break-before: right');
     expect(html).toContain('size: 6in 9in');
     // 200 pages -> 0.5in gutter
     expect(html).toContain('margin: 0.75in 0.5in 0.75in 0.5in');

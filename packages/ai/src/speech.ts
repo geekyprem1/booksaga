@@ -44,7 +44,18 @@ export async function replicateSpeech(
   const timeoutMs = opts.timeoutMs ?? 240_000;
   const pollMs = opts.pollIntervalMs ?? 2000;
 
-  const create = await fetch(`${baseUrl}/models/${owner}/${name}/predictions`, {
+  // Community models (kokoro-82m) have no /models/{owner}/{name}/predictions route (it 404s), so
+  // resolve the latest version and predict against it.
+  const modelRes = await fetch(`${baseUrl}/models/${owner}/${name}`, {
+    headers: { authorization: `Bearer ${opts.token}` },
+  });
+  if (!modelRes.ok) {
+    throw new AiError('AI_UNAVAILABLE', `Replicate model lookup failed (${modelRes.status}) for ${opts.model}`);
+  }
+  const versionId = ((await modelRes.json()) as { latest_version?: { id?: string } }).latest_version?.id;
+  if (!versionId) throw new AiError('AI_UNAVAILABLE', `No version found for ${opts.model}`);
+
+  const create = await fetch(`${baseUrl}/predictions`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${opts.token}`,
@@ -52,11 +63,11 @@ export async function replicateSpeech(
       Prefer: 'wait',
     },
     body: JSON.stringify({
+      version: versionId,
       input: {
         text: req.text,
         voice: req.voice,
         speed: req.speed ?? 1,
-        output_format: 'wav',
       },
     }),
   });

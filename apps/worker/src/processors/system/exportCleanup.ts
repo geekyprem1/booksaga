@@ -3,11 +3,15 @@
  * marked `expired` so the history still explains what happened. Runs daily on the `system` queue.
  */
 import type { DbClient } from '@booksaga/core';
+
 import type { JobRunner } from '../../lib/jobs';
+
+/** Cron jobs have no jobs row, so they only need these two methods. */
+export type CronRunner = Pick<JobRunner, 'progress' | 'complete'>;
 
 export async function processExportCleanup(
   deps: { db: DbClient },
-  runner: JobRunner,
+  runner: CronRunner,
 ): Promise<void> {
   const { db } = deps;
   const now = new Date().toISOString();

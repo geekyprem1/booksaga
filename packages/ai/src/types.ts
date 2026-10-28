@@ -60,7 +60,7 @@ export interface ImageRequest {
   prompt: string;
   /** gpt-image-2 aspect enum, e.g. `1024x1536` (2:3, the print front ratio). */
   aspectRatio?: string;
-  quality?: 'low' | 'medium' | 'high' | 'auto';
+  quality?: 'low';
   /** Reference images for series-style consistency (part 2+ reuses part 1's art). */
   referenceImages?: string[];
   usage: UsageContext;

@@ -6,6 +6,7 @@ import type Konva from 'konva';
 import { Bold, Loader2, Plus, Save, Trash2, Type } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input, Label, Select } from '@/components/ui/input';
+import { toHexColor } from '@booksaga/shared';
 import { saveCoverLayersAction } from '@/lib/series/cover-actions';
 import { cn } from '@/lib/utils';
 
@@ -21,6 +22,8 @@ export interface CoverLayerData {
   color: string;
   uppercase?: boolean;
   shadow?: boolean;
+  /** Letter spacing in em. */
+  tracking?: number;
 }
 
 const FONT_FAMILY: Record<string, string> = {
@@ -49,7 +52,11 @@ export function CoverEditor({
   fontFamily: 'serif' | 'sans' | 'display';
   onSaved: (jobId: string) => void;
 }) {
-  const [layers, setLayers] = useState<CoverLayerData[]>(initialLayers);
+  // Older covers stored the AI's colour *names* ("tidewater green") as layer colours. Normalise
+  // them to #rrggbb so the colour picker works and Save passes validation.
+  const [layers, setLayers] = useState<CoverLayerData[]>(() =>
+    initialLayers.map((item) => ({ ...item, color: toHexColor(item.color, '#ffffff') })),
+  );
   const [selected, setSelected] = useState(0);
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [saving, setSaving] = useState(false);
@@ -130,6 +137,7 @@ export function CoverEditor({
                   fontSize={fontSize}
                   fontFamily={family}
                   fontStyle={item.weight === 'bold' ? 'bold' : 'normal'}
+                  letterSpacing={(item.tracking ?? 0) * fontSize}
                   fill={item.color}
                   shadowColor="rgba(0,0,0,0.7)"
                   shadowBlur={fontSize * 0.25}
@@ -295,9 +303,9 @@ export function defaultCoverLayers(input: {
   author: string;
 }): CoverLayerData[] {
   return [
-    { kind: 'series', text: input.seriesTitle, x: 0.5, y: 0.07, w: 0.82, align: 'center', size: 0.026, color: '#ffffff', uppercase: true },
-    { kind: 'title', text: input.title, x: 0.5, y: 0.6, w: 0.84, align: 'center', size: 0.072, weight: 'bold', color: '#ffffff' },
-    { kind: 'part', text: `Book ${input.partNumber}`, x: 0.5, y: 0.78, w: 0.6, align: 'center', size: 0.022, color: '#f0e6d2', uppercase: true },
-    { kind: 'author', text: input.author, x: 0.5, y: 0.9, w: 0.8, align: 'center', size: 0.034, color: '#ffffff', uppercase: true },
+    { kind: 'series', text: input.seriesTitle, x: 0.5, y: 0.04, w: 0.9, align: 'center', size: 0.021, color: '#ffffff', uppercase: true, tracking: 0.32 },
+    { kind: 'part', text: `Book ${input.partNumber}`, x: 0.5, y: 0.072, w: 0.6, align: 'center', size: 0.02, color: '#f0e6d2', uppercase: true, tracking: 0.4 },
+    { kind: 'title', text: input.title, x: 0.5, y: 0.11, w: 0.88, align: 'center', size: 0.082, weight: 'bold', color: '#ffffff' },
+    { kind: 'author', text: input.author, x: 0.5, y: 0.915, w: 0.86, align: 'center', size: 0.03, color: '#ffffff', uppercase: true, tracking: 0.3 },
   ];
 }

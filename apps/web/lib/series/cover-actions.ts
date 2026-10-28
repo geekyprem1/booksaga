@@ -30,6 +30,9 @@ export async function generateCoverAction(
       .eq('id', bookId)
       .maybeSingle();
     if (!book) throw new AppError('NOT_FOUND', 'Book not found.');
+    if (book.status === 'locked') {
+      throw new AppError('PART_LOCKED', 'Write this part before generating a cover.');
+    }
 
     const { data: series } = await db
       .from('series')
@@ -120,6 +123,7 @@ const layerSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   uppercase: z.boolean().optional(),
   shadow: z.boolean().optional(),
+  tracking: z.number().min(0).max(2).optional(),
 });
 
 const saveLayersInput = z.object({
@@ -160,6 +164,12 @@ export async function saveCoverLayersAction(
     if (series.user_id !== user.id) throw new AppError('FORBIDDEN', 'This cover is not yours.');
 
     const meta = (cover.layers ?? {}) as Record<string, unknown>;
+    if (meta.textMode === 'ai') {
+      throw new AppError(
+        'VALIDATION',
+        'This cover was lettered by the AI, so its text cannot be edited. Generate an Engine cover to change the text.',
+      );
+    }
 
     await db
       .from('covers')
@@ -178,7 +188,7 @@ export async function saveCoverLayersAction(
       type: 'cover',
       refId: cover.book_id,
       userId: user.id,
-      source: { ownerId: user.id, pool: 'main', actingUserId: user.id },
+      source: { ownerId: user.id, pool: 'main' },
       action: 'cover',
       amount: 0,
       skipCredits: true,

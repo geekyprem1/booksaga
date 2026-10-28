@@ -99,7 +99,7 @@ export function TemplateLibrary({
         ))}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
         {visible.map((template) => {
           const locked = template.tier === 'full' && !fullAccess;
           return (
@@ -110,10 +110,10 @@ export function TemplateLibrary({
               className="group text-left"
             >
               <Card className="h-full overflow-hidden transition group-hover:border-primary/60">
-                <div className="relative aspect-[2/3] w-full bg-muted/40">
+                <div className="relative aspect-[5/8] w-full bg-muted/40">
                   {template.coverUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={template.coverUrl} alt="" className="size-full object-cover" />
+                    <img src={template.coverUrl} alt="" className="size-full object-contain" />
                   ) : null}
                   {locked ? (
                     <span className="absolute inset-0 flex items-center justify-center bg-black/60">
@@ -130,7 +130,7 @@ export function TemplateLibrary({
                   <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
                     {CATEGORY_LABELS[template.category] ?? template.category}
                   </p>
-                  <p className="truncate text-sm font-semibold">{template.title}</p>
+                  <p className="line-clamp-2 min-h-10 text-[13px] leading-5 font-semibold">{template.title}</p>
                   <p className="line-clamp-2 text-xs text-muted-foreground">{template.premise}</p>
                 </CardContent>
               </Card>

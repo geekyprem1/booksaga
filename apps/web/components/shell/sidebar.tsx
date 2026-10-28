@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -64,35 +65,52 @@ export function SidebarNav({
     : items;
 
   return (
-    <nav aria-label="Main" className="flex flex-col gap-1">
-      {all.map((item) => {
-        const Icon = ICONS[item.icon];
-        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-        return (
-          <Link
-            key={item.slug}
-            href={item.href}
-            onClick={onNavigate}
-            aria-current={active ? 'page' : undefined}
-            className={cn(
-              'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-              active
-                ? 'bg-brand-gradient text-white glow-primary'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-              item.locked && !active && 'opacity-70',
-            )}
-          >
-            <Icon className="size-4.5 shrink-0" aria-hidden="true" />
-            <span className="flex-1 truncate">{item.label}</span>
-            {item.locked ? (
-              <>
-                <Lock className="size-3.5 shrink-0 opacity-80" aria-hidden="true" />
-                <span className="sr-only">(locked)</span>
-              </>
-            ) : null}
-          </Link>
-        );
-      })}
-    </nav>
+    <>
+      <nav aria-label="Main" className="flex shrink-0 flex-col gap-1">
+        {all.map((item) => {
+          const Icon = ICONS[item.icon];
+          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          return (
+            <Link
+              key={item.slug}
+              href={item.href}
+              onClick={onNavigate}
+              aria-current={active ? 'page' : undefined}
+              className={cn(
+                'group flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2 text-[15px] leading-5 font-semibold transition-colors motion-reduce:transition-none',
+                active
+                  ? 'bg-brand-gradient border-white/25 text-white glow-primary'
+                  : 'border-white/10 bg-slate-950/70 text-white shadow-sm hover:border-violet-300/40 hover:bg-slate-900/95',
+              )}
+            >
+              <Icon
+                className={cn('size-5 shrink-0', !active && 'text-violet-200')}
+                aria-hidden="true"
+              />
+              <span className="min-w-0 flex-1">{item.label}</span>
+              {item.locked ? (
+                <>
+                  <Lock className="size-3.5 shrink-0 opacity-80" aria-hidden="true" />
+                  <span className="sr-only">(locked)</span>
+                </>
+              ) : null}
+            </Link>
+          );
+        })}
+      </nav>
+      <div
+        aria-hidden="true"
+        data-sidebar-art
+        className="relative mt-auto aspect-[6/5] w-full shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-950"
+      >
+        <Image
+          src="/hero/sidebar-reading-room.webp"
+          alt=""
+          fill
+          sizes="(min-width: 1024px) 224px, 256px"
+          className="object-cover"
+        />
+      </div>
+    </>
   );
 }

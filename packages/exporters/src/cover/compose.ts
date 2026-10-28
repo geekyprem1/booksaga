@@ -9,6 +9,7 @@
  */
 import { createCanvas, GlobalFonts, loadImage } from '@napi-rs/canvas';
 import { fileURLToPath } from 'node:url';
+import { toHexColor } from '@booksaga/shared';
 
 export type CoverFontFamily = 'serif' | 'sans' | 'display';
 
@@ -27,6 +28,8 @@ export interface CoverLayer {
   color: string;
   uppercase?: boolean;
   shadow?: boolean;
+  /** Letter spacing in em (0.3 gives the wide-set caps used for series and author lines). */
+  tracking?: number;
 }
 
 export interface ComposeInput {
@@ -35,7 +38,7 @@ export interface ComposeInput {
   height: number;
   layers: CoverLayer[];
   fontFamily: CoverFontFamily;
-  /** 0–1, JPEG quality. */
+  /** JPEG quality, 1-100 (a 0-1 fraction is also accepted). Default 92. */
   quality?: number;
 }
 
@@ -91,6 +94,29 @@ export function wrapText(
   return lines;
 }
 
+/**
+ * X anchor for a layer, in canvas pixels.
+ *
+ * `x` is the normalised CENTRE of the text box (the Konva editor stores it that way), so left and
+ * right aligned layers must be anchored to the box edge — otherwise the server render is shifted by
+ * half the box width compared with the editor preview.
+ */
+export function layerAnchorX(
+  layer: Pick<CoverLayer, 'x' | 'w' | 'align'>,
+  width: number,
+): number {
+  if (layer.align === 'left') return (layer.x - layer.w / 2) * width;
+  if (layer.align === 'right') return (layer.x + layer.w / 2) * width;
+  return layer.x * width;
+}
+
+/** Normalise a quality value to the 0-100 scale. Accepts 0-1 fractions too. Default 92. */
+export function jpegQuality(quality?: number): number {
+  if (quality === undefined || !Number.isFinite(quality)) return 92;
+  const scaled = quality <= 1 ? quality * 100 : quality;
+  return Math.min(100, Math.max(1, Math.round(scaled)));
+}
+
 export async function composeCover(input: ComposeInput): Promise<Buffer> {
   registerFonts();
 
@@ -130,11 +156,13 @@ export async function composeCover(input: ComposeInput): Promise<Buffer> {
     ctx.font = `${weight} ${fontSize}px ${family[weight === 'bold' ? 'bold' : 'regular']}`;
     ctx.textAlign = layer.align;
     ctx.textBaseline = 'middle';
+    // Set after `font`, and before measuring, so wrapping accounts for the extra spacing.
+    ctx.letterSpacing = layer.tracking ? `${(layer.tracking * fontSize).toFixed(1)}px` : '0px';
 
     const maxWidth = layer.w * width;
     const lines = wrapText(ctx, text, maxWidth);
     const lineHeight = fontSize * 1.18;
-    const centerX = layer.x * width;
+    const anchorX = layerAnchorX(layer, width);
     // `y` is the TOP of the text block (the editor draws it the same way).
     const startY = layer.y * height + lineHeight / 2;
 
@@ -149,15 +177,17 @@ export async function composeCover(input: ComposeInput): Promise<Buffer> {
         ctx.shadowBlur = 0;
         ctx.shadowOffsetY = 0;
       }
-      ctx.fillStyle = layer.color;
-      ctx.fillText(line, centerX, y, maxWidth);
+      ctx.fillStyle = toHexColor(layer.color, '#ffffff');
+      ctx.fillText(line, anchorX, y, maxWidth);
     }
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
   }
 
-  return canvas.toBuffer('image/jpeg', input.quality ?? 0.9);
+  // @napi-rs/canvas takes JPEG quality as 0-100 (not 0-1): passing 0.9 gives ~quality 1, which
+  // produced blocky, posterised covers.
+  return canvas.toBuffer('image/jpeg', jpegQuality(input.quality));
 }
 
 /** The default layout used for every book: series name, title, book number, author. */
@@ -168,52 +198,58 @@ export function defaultLayers(input: {
   author: string;
   palette?: string[];
 }): CoverLayer[] {
-  const accent = input.palette?.[1] ?? '#f0e6d2';
+  // Palette entries are colour names from the art director ("tidewater green"), not hex codes.
+  const accent = toHexColor(input.palette?.[1]);
+  // Bestseller-style stack: wide-set series + book line, a large title right under them, and the
+  // author alone at the foot. The same positions on every book make a series read as one set.
   return [
     {
       kind: 'series',
       text: input.seriesTitle,
       x: 0.5,
-      y: 0.07,
-      w: 0.82,
+      y: 0.04,
+      w: 0.9,
       align: 'center',
-      size: 0.026,
+      size: 0.021,
       color: '#ffffff',
       uppercase: true,
       weight: 'regular',
-    },
-    {
-      kind: 'title',
-      text: input.title,
-      x: 0.5,
-      y: 0.60,
-      w: 0.84,
-      align: 'center',
-      size: 0.072,
-      weight: 'bold',
-      color: '#ffffff',
+      tracking: 0.32,
     },
     {
       kind: 'part',
       text: `Book ${input.partNumber}`,
       x: 0.5,
-      y: 0.78,
+      y: 0.072,
       w: 0.6,
       align: 'center',
-      size: 0.022,
+      size: 0.02,
       color: accent,
       uppercase: true,
+      tracking: 0.4,
+    },
+    {
+      kind: 'title',
+      text: input.title,
+      x: 0.5,
+      y: 0.11,
+      w: 0.88,
+      align: 'center',
+      size: 0.082,
+      weight: 'bold',
+      color: '#ffffff',
     },
     {
       kind: 'author',
       text: input.author,
       x: 0.5,
-      y: 0.90,
-      w: 0.8,
+      y: 0.915,
+      w: 0.86,
       align: 'center',
-      size: 0.034,
+      size: 0.03,
       color: '#ffffff',
       uppercase: true,
+      tracking: 0.3,
     },
   ];
 }

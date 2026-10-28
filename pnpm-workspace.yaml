@@ -4,6 +4,9 @@ packages:
 
 # pnpm blocks dependency build scripts by default; allow only what we need.
 allowBuilds:
+  # pagedjs transitive deps: postinstall is only a donation banner.
+  core-js: false
+  es5-ext: false
   esbuild: true
   # Optional native accelerator for msgpackr (BullMQ dependency); the pure-JS path is fine.
   msgpackr-extract: false

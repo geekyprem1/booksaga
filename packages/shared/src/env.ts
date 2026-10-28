@@ -22,16 +22,23 @@ export const serverEnvSchema = publicEnvSchema.extend({
   SETTINGS_ENCRYPTION_KEY: optionalString,
 
   AI_MODE: z.enum(['live', 'mock']).default('live'),
-  OPENROUTER_API_KEY: optionalString,
-  OPENROUTER_TEXT_MODEL: z.string().default('deepseek/deepseek-v4.1-flash-1017'),
+  /**
+   * Text LLM: any OpenAI-compatible chat-completions endpoint (OpenRouter, OpenAI, DeepSeek,
+   * Together, Groq, a local vLLM/Ollama...). The URL is the part before `/chat/completions`.
+   */
+  TEXT_API_BASE_URL: z.preprocess(emptyToUndefined, z.url().default('https://openrouter.ai/api/v1')),
+  TEXT_API_KEY: optionalString,
+  TEXT_MODEL: z.preprocess(emptyToUndefined, z.string().default('deepseek/deepseek-v4.1-flash-1017')),
   /**
    * Model for structured, low-creativity steps (chapter facts, continuity, metadata). Falls back to
    * the main model when unset. A non-reasoning model is 3–4× cheaper and 2× faster here.
    */
-  OPENROUTER_FAST_MODEL: optionalString,
+  TEXT_FAST_MODEL: optionalString,
+  /** Reasoning effort (low/medium/high). Lower = fewer hidden reasoning tokens, faster answers. */
+  TEXT_REASONING_EFFORT: z.preprocess(emptyToUndefined, z.enum(['low', 'medium', 'high']).optional()),
   REPLICATE_API_TOKEN: optionalString,
-  REPLICATE_IMAGE_MODEL: z.string().default('openai/gpt-image-2'),
-  REPLICATE_IMAGE_QUALITY: z.enum(['low', 'medium', 'high']).default('low'),
+  REPLICATE_IMAGE_MODEL: z.literal('openai/gpt-image-2').default('openai/gpt-image-2'),
+  REPLICATE_IMAGE_QUALITY: z.literal('low').default('low'),
   REPLICATE_TTS_MODEL: z.string().default('jaaari/kokoro-82m'),
 
   WORKER_QUEUES: z.string().default('text,image,export,audio,system'),
@@ -42,7 +49,7 @@ export const serverEnvSchema = publicEnvSchema.extend({
   WORKER_HEALTH_PORT: intWithDefault(3001),
   /** Chromium binary used for the print PDF (Playwright's download or the Docker path). */
   CHROME_EXECUTABLE_PATH: optionalString,
-  OPENROUTER_RPM: intWithDefault(300),
+  TEXT_RPM: intWithDefault(300),
   REPLICATE_RPM: intWithDefault(120),
 });
 
@@ -64,6 +71,26 @@ export function parseEnv<T extends z.ZodType>(
     throw new Error(`Invalid environment configuration:\n${lines.join('\n')}`);
   }
   return result.data;
+}
+
+export interface TextLlmConfig {
+  baseUrl: string;
+  apiKey: string | undefined;
+  model: string;
+  /** Undefined when no separate fast model is configured. */
+  fastModel: string | undefined;
+  reasoningEffort: 'low' | 'medium' | 'high' | undefined;
+}
+
+/** Text LLM settings (TEXT_* env vars). */
+export function resolveTextLlm(env: ServerEnv): TextLlmConfig {
+  return {
+    baseUrl: env.TEXT_API_BASE_URL,
+    apiKey: env.TEXT_API_KEY,
+    model: env.TEXT_MODEL,
+    fastModel: env.TEXT_FAST_MODEL,
+    reasoningEffort: env.TEXT_REASONING_EFFORT,
+  };
 }
 
 let cachedServerEnv: ServerEnv | undefined;

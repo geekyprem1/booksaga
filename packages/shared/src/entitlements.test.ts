@@ -210,7 +210,6 @@ describe('resolveCreditSource', () => {
     expect(resolveCreditSource({ id: 'u1', parentAgencyId: null }, 'book_standard')).toEqual({
       ownerId: 'u1',
       pool: 'main',
-      actingUserId: 'u1',
     });
   });
 

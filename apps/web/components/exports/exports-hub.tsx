@@ -7,6 +7,11 @@ import { Download, FileArchive, Loader2 } from 'lucide-react';
 import { Badge, Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { JobProgressDialog } from '@/components/jobs/job-progress-dialog';
+import {
+  EXPORT_FORMATS,
+  selectedExportFormats,
+  type ExportFormat,
+} from '@/lib/exports/formats';
 import { exportBookAction } from '@/lib/series/export-actions';
 import { cn } from '@/lib/utils';
 
@@ -27,11 +32,12 @@ export interface ExportRow {
   expiresAt: string | null;
 }
 
-type Format = 'epub' | 'pdf' | 'docx' | 'metadata' | 'wrap';
+type Format = ExportFormat;
 
 const FORMAT_LABELS: Record<Format, string> = {
   epub: 'EPUB',
   pdf: 'Print PDF',
+  reader: 'Reader PDF (with cover)',
   docx: 'DOCX',
   metadata: 'Metadata',
   wrap: 'Paperback wrap',
@@ -53,12 +59,12 @@ export function ExportsHub({
   const [selectedFormats, setSelectedFormats] = useState<Record<string, Format[]>>({});
 
   function formatsFor(bookId: string): Format[] {
-    return selectedFormats[bookId] ?? ['epub', 'pdf', 'docx', 'metadata', 'wrap'];
+    return selectedExportFormats(selectedFormats[bookId], canWrap);
   }
 
   function toggle(bookId: string, format: Format) {
     setSelectedFormats((current) => {
-      const active = current[bookId] ?? ['epub', 'pdf', 'docx', 'metadata', 'wrap'];
+      const active = selectedExportFormats(current[bookId], canWrap);
       let next = active.includes(format)
         ? active.filter((item) => item !== format)
         : [...active, format];
@@ -120,7 +126,7 @@ export function ExportsHub({
               </div>
 
               <div className="flex flex-wrap gap-1">
-                {(['epub', 'pdf', 'docx', 'metadata', 'wrap'] as Format[]).map((format) => {
+                {EXPORT_FORMATS.map((format) => {
                   const locked = format === 'wrap' && !canWrap;
                   const active = formatsFor(book.id).includes(format);
                   return (

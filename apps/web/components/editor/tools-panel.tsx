@@ -2,16 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { diffWords } from 'diff';
-import {
-  Check,
-  ChevronRight,
-  History,
-  Loader2,
-  RotateCcw,
-  Sparkles,
-  Wand2,
-  X,
-} from 'lucide-react';
+import { Check, ChevronRight, History, Loader2, RotateCcw, Sparkles, Wand2, X } from 'lucide-react';
 import type { TiptapDoc } from '@booksaga/shared';
 import { Badge } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -92,11 +83,7 @@ export function ToolsPanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {tab === 'ai' ? (
-          <AiTools
-            chapter={chapter}
-            selection={selection}
-            onApplied={onApplied}
-          />
+          <AiTools chapter={chapter} selection={selection} onApplied={onApplied} />
         ) : null}
         {tab === 'versions' ? <Versions chapter={chapter} onRefresh={onRefresh} /> : null}
         {tab === 'continuity' ? (
@@ -129,11 +116,9 @@ function AiTools({
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
 
-  const job = useJob(jobId);
+  const { job, error: trackingError, isLoading } = useJob(jobId);
   const result =
-    job?.status === 'completed'
-      ? (job.meta.result as RewriteResult | undefined)
-      : undefined;
+    job?.status === 'completed' ? (job.meta.result as RewriteResult | undefined) : undefined;
 
   async function run(mode: 'rewrite' | 'expand' | 'shorten' | 'regenerate') {
     setError(null);
@@ -169,7 +154,9 @@ function AiTools({
     setJobId(null);
   }
 
-  const working = busy !== null || (job && job.status !== 'completed' && job.status !== 'failed');
+  const working =
+    busy !== null ||
+    (jobId !== null && !['completed', 'failed', 'cancelled'].includes(job?.status ?? ''));
 
   return (
     <div className="flex flex-col gap-3">
@@ -226,13 +213,29 @@ function AiTools({
       {working ? (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-          {job?.stepLabel ?? 'Queued…'} · {job?.progress ?? 0}%
+          {job?.status === 'queued'
+            ? 'Waiting to start'
+            : (job?.stepLabel ??
+              (isLoading
+                ? 'Loading job status…'
+                : trackingError
+                  ? 'Progress unavailable'
+                  : 'Waiting for an update'))}
+          {job ? ` · ${job.progress}%` : ''}
         </p>
       ) : null}
 
       {error ? (
-        <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-2 text-xs text-rose-200">
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 p-2 text-xs text-rose-200"
+        >
           {error}
+        </p>
+      ) : null}
+      {trackingError ? (
+        <p role="alert" className="text-xs text-amber-300">
+          Progress updates are unavailable: {trackingError} Tracking will retry automatically.
         </p>
       ) : null}
 
@@ -240,6 +243,9 @@ function AiTools({
         <p className="text-xs text-amber-300">
           {job.error ?? 'The AI edit failed.'} Your credit was refunded.
         </p>
+      ) : null}
+      {job?.status === 'cancelled' ? (
+        <p className="text-xs text-muted-foreground">The AI edit was cancelled.</p>
       ) : null}
 
       {result ? (
@@ -459,8 +465,9 @@ function Metadata({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
-  const job = useJob(jobId);
-  const running = jobId !== null && job?.status !== 'completed' && job?.status !== 'failed';
+  const { job, error: trackingError, isLoading } = useJob(jobId);
+  const running =
+    jobId !== null && !['completed', 'failed', 'cancelled'].includes(job?.status ?? '');
 
   useEffect(() => {
     if (job?.status === 'completed') onRefresh();
@@ -552,14 +559,12 @@ function Metadata({
         <Button type="button" size="sm" onClick={save} disabled={saving}>
           {saving ? <Loader2 className="animate-spin" aria-hidden="true" /> : null} Save
         </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          onClick={regenerate}
-          disabled={running}
-        >
-          {running ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
+        <Button type="button" size="sm" variant="secondary" onClick={regenerate} disabled={running}>
+          {running ? (
+            <Loader2 className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Sparkles aria-hidden="true" />
+          )}
           Regenerate · 1 credit
         </Button>
       </div>
@@ -567,8 +572,29 @@ function Metadata({
       {message ? <p className="text-xs text-muted-foreground">{message}</p> : null}
       {running ? (
         <p className="text-xs text-muted-foreground">
-          {job?.stepLabel ?? 'Queued…'} · {job?.progress ?? 0}%
+          {job?.status === 'queued'
+            ? 'Waiting to start'
+            : (job?.stepLabel ??
+              (isLoading
+                ? 'Loading job status…'
+                : trackingError
+                  ? 'Progress unavailable'
+                  : 'Waiting for an update'))}
+          {job ? ` · ${job.progress}%` : ''}
         </p>
+      ) : null}
+      {trackingError ? (
+        <p role="alert" className="text-xs text-amber-300">
+          Progress updates are unavailable: {trackingError} Tracking will retry automatically.
+        </p>
+      ) : null}
+      {job?.status === 'failed' ? (
+        <p role="alert" className="text-xs text-amber-300">
+          {job.error ?? 'Metadata generation failed.'}
+        </p>
+      ) : null}
+      {job?.status === 'cancelled' ? (
+        <p className="text-xs text-muted-foreground">Metadata generation was cancelled.</p>
       ) : null}
     </div>
   );

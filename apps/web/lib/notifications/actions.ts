@@ -40,12 +40,13 @@ export async function listNotificationsAction(
 ): Promise<ActionResult<NotificationRow[]>> {
   return runAction(async () => {
     const user = await requireUser();
+    const take = Number.isFinite(limit) ? Math.min(Math.max(Math.trunc(limit), 1), 100) : 20;
     const { data, error } = await getAdminDb()
       .from('notifications')
       .select('id, type, title, body, link, read_at, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(limit);
+      .limit(take);
 
     if (error) throw new AppError('INTERNAL', `Could not load notifications: ${error.message}`);
     return (data ?? []).map(map);

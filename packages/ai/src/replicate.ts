@@ -18,11 +18,10 @@ export interface ReplicateOptions {
   baseUrl?: string;
   timeoutMs?: number;
   pollIntervalMs?: number;
-  /** Estimated USD per image by quality (Replicate does not return cost). */
-  pricing?: Record<string, number>;
 }
 
-const DEFAULT_PRICE: Record<string, number> = { low: 0.02, medium: 0.07, high: 0.25, auto: 0.07 };
+/** Estimated USD per output image; Replicate does not return actual cost. */
+const ESTIMATED_IMAGE_COST_USD = 0.012;
 
 interface Prediction {
   id: string;
@@ -46,16 +45,17 @@ export async function replicateImage(
 ): Promise<ImageResult> {
   const baseUrl = (opts.baseUrl ?? 'https://api.replicate.com/v1').replace(/\/$/, '');
   const [owner, name] = opts.model.split('/');
-  if (!owner || !name) throw new AiError('AI_NOT_CONFIGURED', `Invalid Replicate model: ${opts.model}`);
+  if (opts.model !== 'openai/gpt-image-2') {
+    throw new AiError('AI_NOT_CONFIGURED', 'Cover images require the OpenAI GPT Image 2 low-cost model.');
+  }
 
   const timeoutMs = opts.timeoutMs ?? 180_000;
   const pollMs = opts.pollIntervalMs ?? 2000;
-  const quality = req.quality ?? 'low';
 
   const input: Record<string, unknown> = {
     prompt: req.prompt,
     aspect_ratio: req.aspectRatio ?? '1024x1536',
-    quality,
+    quality: 'low',
     output_format: 'png',
     number_of_images: 1,
   };
@@ -111,7 +111,7 @@ export async function replicateImage(
   return {
     buffer,
     mime: 'image/png',
-    costUsd: (opts.pricing ?? DEFAULT_PRICE)[quality] ?? DEFAULT_PRICE.low ?? 0.02,
+    costUsd: ESTIMATED_IMAGE_COST_USD,
     width: 1024,
     height: 1536,
     model: opts.model,

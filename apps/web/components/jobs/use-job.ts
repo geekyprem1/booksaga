@@ -7,6 +7,10 @@ import type { JobSnapshot } from '@/lib/series/validation';
 
 interface JobRow {
   id: string;
+  type: string;
+  created_at: string;
+  started_at: string | null;
+  heartbeat_at: string | null;
   status: JobSnapshot['status'];
   progress: number;
   step_label: string | null;
@@ -18,6 +22,10 @@ interface JobRow {
 function toSnapshot(row: JobRow): JobSnapshot {
   return {
     id: row.id,
+    type: row.type,
+    createdAt: row.created_at,
+    startedAt: row.started_at,
+    heartbeatAt: row.heartbeat_at,
     status: row.status,
     progress: row.progress,
     stepLabel: row.step_label,
@@ -27,30 +35,69 @@ function toSnapshot(row: JobRow): JobSnapshot {
   };
 }
 
-interface JobState {
-  jobId: string;
-  job: JobSnapshot;
+export interface JobTracking {
+  job: JobSnapshot | null;
+  error: string | null;
+  isLoading: boolean;
+  lastSyncedAt: number | null;
 }
 
-/**
- * Live job state: Supabase Realtime on the `jobs` row (RLS scopes it to the owner) plus a 3s
- * polling fallback, so progress still moves when the websocket is blocked (corporate proxies).
- */
-export function useJob(jobId: string | null): JobSnapshot | null {
+interface JobState extends JobTracking {
+  jobId: string;
+}
+
+/** Realtime updates with a 3s polling fallback; transport errors retain the last known job. */
+export function useJob(jobId: string | null): JobTracking {
   const [state, setState] = useState<JobState | null>(null);
 
   useEffect(() => {
     if (!jobId) return;
 
     let active = true;
+    let terminal = false;
+    let loading = false;
+    let revision = 0;
     const supabase = getBrowserClient();
 
-    const load = async () => {
-      const result = await getJobAction(jobId);
-      if (active && result.ok) setState({ jobId, job: result.data });
+    const receive = (job: JobSnapshot) => {
+      if (!active || terminal) return;
+      revision += 1;
+      terminal = ['completed', 'failed', 'cancelled'].includes(job.status);
+      if (terminal) clearInterval(interval);
+      setState({ jobId, job, error: null, isLoading: false, lastSyncedAt: Date.now() });
     };
 
-    void load();
+    const reportError = (message: string) => {
+      if (!active || terminal) return;
+      setState((previous) => ({
+        jobId,
+        job: previous?.jobId === jobId ? previous.job : null,
+        lastSyncedAt: previous?.jobId === jobId ? previous.lastSyncedAt : null,
+        error: message,
+        isLoading: false,
+      }));
+    };
+
+    const load = async () => {
+      if (loading || terminal || !active) return;
+      loading = true;
+      const requestedRevision = revision;
+      try {
+        const result = await getJobAction(jobId);
+        // A response requested before a realtime update must not roll that update back.
+        if (!active || requestedRevision !== revision) return;
+        if (result.ok) receive(result.data);
+        else reportError(result.error.message);
+      } catch (error) {
+        if (requestedRevision === revision) {
+          reportError(
+            error instanceof Error ? error.message : 'Could not connect to job tracking. Retrying…',
+          );
+        }
+      } finally {
+        loading = false;
+      }
+    };
 
     const channel = supabase
       .channel(`job:${jobId}`)
@@ -58,12 +105,13 @@ export function useJob(jobId: string | null): JobSnapshot | null {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'jobs', filter: `id=eq.${jobId}` },
         (payload) => {
-          if (active && payload.new) setState({ jobId, job: toSnapshot(payload.new as JobRow) });
+          if (payload.new) receive(toSnapshot(payload.new as JobRow));
         },
       )
       .subscribe();
 
-    const interval = setInterval(() => void load(), 3000);
+    const interval = window.setInterval(() => void load(), 3000);
+    void load();
 
     return () => {
       active = false;
@@ -72,6 +120,7 @@ export function useJob(jobId: string | null): JobSnapshot | null {
     };
   }, [jobId]);
 
-  // Stale state from a previous job must never leak into the current dialog.
-  return state && state.jobId === jobId ? state.job : null;
+  // Never leak the previous job while the new job's first request is in flight.
+  if (state?.jobId === jobId) return state;
+  return { job: null, error: null, isLoading: Boolean(jobId), lastSyncedAt: null };
 }

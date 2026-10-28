@@ -22,6 +22,8 @@ export interface EpubInput {
   frontHtml: string;
   backHtml: string;
   cover?: { buffer: Buffer; mime: string } | null;
+  /** `#rrggbb` accent for chapter labels and the part line. Pick one that reads on white. */
+  accent?: string;
 }
 
 const xhtml = (title: string, body: string, extra = '') => `<?xml version="1.0" encoding="UTF-8"?>
@@ -38,10 +40,10 @@ ${body}
 </body>
 </html>`;
 
-const STYLES = `body { font-family: Georgia, 'Times New Roman', serif; line-height: 1.55; margin: 0 5%; }
+const styles = (accent: string) => `body { font-family: Georgia, 'Times New Roman', serif; line-height: 1.55; margin: 0 5%; }
 h1, h2 { font-family: Georgia, serif; line-height: 1.2; }
 h1.chapter-title { margin: 2.5em 0 1.5em; font-size: 1.6em; page-break-before: always; }
-.chapter-number { display: block; font-size: 0.55em; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.7; margin-bottom: 0.4em; }
+.chapter-number { display: block; font-size: 0.55em; letter-spacing: 0.18em; text-transform: uppercase; color: ${accent}; margin-bottom: 0.4em; }
 p { margin: 0 0 0.9em; text-indent: 1.4em; }
 p:first-of-type, h1 + p { text-indent: 0; }
 hr.scene-break { border: 0; text-align: center; margin: 1.6em 0; }
@@ -50,13 +52,23 @@ blockquote { margin: 1.2em 2em; font-style: italic; }
 .title-page { text-align: center; margin-top: 20%; }
 .title-page .series-name { text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.8em; }
 .title-page .book-title { font-size: 2.2em; margin: 0.4em 0; text-indent: 0; }
+.title-page .book-part { text-transform: uppercase; letter-spacing: 0.3em; font-size: 0.8em; color: ${accent}; }
 .title-page .book-part, .title-page .author { text-indent: 0; }
+.title-page .book-genre { text-indent: 0; font-style: italic; margin-top: 2em; }
 .copyright-page { font-size: 0.85em; margin-top: 30%; }
 .copyright-page p { text-indent: 0; }
+.copyright-page .reading-order-label { text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.85em; color: ${accent}; margin-top: 1.6em; }
+.copyright-page .reading-order { list-style: none; padding-left: 0; }
+.copyright-page .reading-order li { text-indent: 0; }
+.copyright-page .reading-order li.current { font-weight: bold; }
 .toc ol { list-style: none; padding-left: 0; }
 .toc li { margin: 0.4em 0; text-indent: 0; }
+.toc .toc-num { color: ${accent}; font-weight: bold; margin-right: 0.6em; }
 .back-matter { margin-top: 15%; }
-.back-matter p { text-indent: 0; }`;
+.back-matter p { text-indent: 0; }
+.end-of-book { text-align: center; page-break-before: always; }
+.end-of-book .end-mark { text-transform: uppercase; letter-spacing: 0.3em; color: ${accent}; }
+.end-of-book .continued { font-style: italic; }`;
 
 export async function buildEpub(input: EpubInput): Promise<Buffer> {
   const zip = new JSZip();
@@ -75,7 +87,7 @@ export async function buildEpub(input: EpubInput): Promise<Buffer> {
 </container>`,
   );
 
-  zip.file('OEBPS/styles.css', STYLES);
+  zip.file('OEBPS/styles.css', styles(input.accent ?? '#5b4636'));
   zip.file('OEBPS/front-matter.xhtml', xhtml('Front matter', input.frontHtml));
   zip.file('OEBPS/back-matter.xhtml', xhtml('Back matter', input.backHtml));
 

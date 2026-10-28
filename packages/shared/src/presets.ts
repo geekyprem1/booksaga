@@ -18,10 +18,12 @@ export const LENGTH_PRESETS: Record<LengthPreset, LengthPresetDefinition> = {
   short: {
     key: 'short',
     label: 'Short',
-    chapters: [8, 10],
-    wordsPerChapter: 1300,
-    approxWords: 12000,
-    description: '~12k words · 8–10 chapters',
+    // Thriller-style pacing: many short chapters that each end on a hook.
+    chapters: [14, 16],
+    // The model overshoots the per-chapter target by ~25%, so ask for less to land near 1,000.
+    wordsPerChapter: 850,
+    approxWords: 15000,
+    description: '~15k words · 14–16 short chapters',
   },
   standard: {
     key: 'standard',

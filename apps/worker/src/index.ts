@@ -16,7 +16,7 @@ import {
   type Queues,
 } from '@booksaga/core';
 import { createAi, type AiClient } from '@booksaga/ai';
-import { getServerEnv, type ServerEnv } from '@booksaga/shared';
+import { getServerEnv, resolveTextLlm, type ServerEnv } from '@booksaga/shared';
 import { JobRunner, loadJob } from './lib/jobs';
 import { runStuckReaper } from './cron/reaper';
 import { processBook } from './processors/text/book';
@@ -136,6 +136,7 @@ async function dispatch(runtime: Runtime, job: Job, runner: JobRunner): Promise<
         },
       );
     case 'export_cleanup':
+      // Only reachable through the scheduler (handled above); kept for type completeness.
       return processExportCleanup({ db: runtime.db }, runner);
     case 'trash_purge':
       return processTrashPurge({ db: runtime.db }, runner);
@@ -145,6 +146,20 @@ async function dispatch(runtime: Runtime, job: Job, runner: JobRunner): Promise<
 }
 
 async function handleJob(runtime: Runtime, job: Job): Promise<void> {
+  // System cron jobs (schedulers) have no `jobs` row and no credits â€” run them before the guard.
+  if (job.name === 'stuck_reaper') {
+    const summary = await runStuckReaper(runtime.db, runtime.queues);
+    console.log(`[worker] reaper: requeued ${summary.requeued}, failed ${summary.failed}`);
+    return;
+  }
+  if (job.name === 'export_cleanup') {
+    await processExportCleanup(
+      { db: runtime.db },
+      { progress: async () => undefined, complete: async () => undefined },
+    );
+    return;
+  }
+
   const data = job.data as { jobId?: string };
   if (!data?.jobId) throw new Error(`Job ${job.id} is missing a jobId in its payload.`);
 
@@ -219,26 +234,30 @@ function startHealthServer(runtime: Runtime): ReturnType<typeof createServer> {
 async function main(): Promise<void> {
   const env = getServerEnv();
   const db = createAdminClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+  const text = resolveTextLlm(env);
   const ai = createAi({
     mode: env.AI_MODE,
-    apiKey: env.OPENROUTER_API_KEY,
-    model: env.OPENROUTER_TEXT_MODEL,
+    baseUrl: text.baseUrl,
+    apiKey: text.apiKey,
+    model: text.model,
+    reasoningEffort: text.reasoningEffort,
     db,
     // Image + speech go through Replicate. Without these the client silently stays on mock art and
     // mock audio even in live mode.
     replicateToken: env.REPLICATE_API_TOKEN,
     imageModel: env.REPLICATE_IMAGE_MODEL,
-    imageQuality: env.REPLICATE_IMAGE_QUALITY,
     speechModel: env.REPLICATE_TTS_MODEL,
   });
 
   // Structured, low-creativity steps run on the optional fast model (same key, same usage log).
   const aiFast =
-    env.OPENROUTER_FAST_MODEL && env.OPENROUTER_FAST_MODEL !== env.OPENROUTER_TEXT_MODEL
+    text.fastModel && text.fastModel !== text.model
       ? createAi({
           mode: env.AI_MODE,
-          apiKey: env.OPENROUTER_API_KEY,
-          model: env.OPENROUTER_FAST_MODEL,
+          baseUrl: text.baseUrl,
+          apiKey: text.apiKey,
+          model: text.fastModel,
+          reasoningEffort: text.reasoningEffort,
           db,
         })
       : ai;
@@ -305,11 +324,11 @@ async function main(): Promise<void> {
   const server = startHealthServer(runtime);
 
   console.log(
-    `[worker] up · queues=${[...enabled].join(',')} · text=${concurrency.text} · ai_mode=${env.AI_MODE}`,
+    `[worker] up Â· queues=${[...enabled].join(',')} Â· text=${concurrency.text} Â· ai_mode=${env.AI_MODE}`,
   );
 
   const shutdown = async (signal: string) => {
-    console.log(`[worker] ${signal} received, draining…`);
+    console.log(`[worker] ${signal} received, drainingâ€¦`);
     server.close();
     await Promise.all(runtime.workers.map((w) => w.close()));
     await closeQueues(queues);

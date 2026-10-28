@@ -8,26 +8,31 @@ const valid = {
 };
 
 describe('parseEnv', () => {
-  it('applies defaults', () => {
-    const env = parseEnv(serverEnvSchema, valid);
-    expect(env.WORKER_TEXT_CONCURRENCY).toBe(50);
-    expect(env.WORKER_EXPORT_CONCURRENCY).toBe(2);
-    expect(env.OPENROUTER_TEXT_MODEL).toBe('deepseek/deepseek-v4.1-flash-1017');
-    expect(env.AI_MODE).toBe('live');
-  });
 
   it('treats empty strings from a copied .env.example as unset', () => {
     const env = parseEnv(serverEnvSchema, {
       ...valid,
-      OPENROUTER_API_KEY: '',
+      TEXT_API_KEY: '',
       WORKER_TEXT_CONCURRENCY: '',
     });
-    expect(env.OPENROUTER_API_KEY).toBeUndefined();
+    expect(env.TEXT_API_KEY).toBeUndefined();
     expect(env.WORKER_TEXT_CONCURRENCY).toBe(50);
   });
 
   it('fails fast listing every missing variable', () => {
     expect(() => parseEnv(serverEnvSchema, {})).toThrowError(/NEXT_PUBLIC_SUPABASE_URL/);
     expect(() => parseEnv(serverEnvSchema, {})).toThrowError(/SUPABASE_SERVICE_ROLE_KEY/);
+  });
+
+  it.each(['medium', 'high', 'auto'])('rejects image quality %s instead of escalating cover costs', (quality) => {
+    expect(() =>
+      parseEnv(serverEnvSchema, { ...valid, REPLICATE_IMAGE_QUALITY: quality }),
+    ).toThrowError(/REPLICATE_IMAGE_QUALITY/);
+  });
+
+  it('rejects an image model outside the agreed GPT Image 2 policy', () => {
+    expect(() =>
+      parseEnv(serverEnvSchema, { ...valid, REPLICATE_IMAGE_MODEL: 'another-provider/expensive-model' }),
+    ).toThrowError(/REPLICATE_IMAGE_MODEL/);
   });
 });

@@ -52,8 +52,8 @@ export interface CreditSource {
   /** Whose balance is debited. */
   ownerId: string;
   pool: CreditPool;
-  /** Who triggered the job (used for agency client allotment tracking). */
-  actingUserId: string;
+  /** The agency client who triggered the job. Only set for agency clients (allotment tracking). */
+  actingUserId?: string;
 }
 
 /**
@@ -74,5 +74,5 @@ export function resolveCreditSource(
       actingUserId: user.id,
     };
   }
-  return { ownerId: user.id, pool: basePool, actingUserId: user.id };
+  return { ownerId: user.id, pool: basePool };
 }

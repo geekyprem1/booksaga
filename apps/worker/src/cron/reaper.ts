@@ -9,7 +9,13 @@
  * Each job gets two re-queues; after that it fails and the reservation is refunded, so a book that
  * reliably crashes cannot loop forever on the user's credits.
  */
-import { refundCredits, queueForJob, type DbClient, type JobType, type Queues } from '@booksaga/core';
+import {
+  refundCredits,
+  queueForJob,
+  type DbClient,
+  type JobType,
+  type Queues,
+} from '@booksaga/core';
 
 const STALE_HEARTBEAT_MS = 5 * 60 * 1000;
 const ORPHAN_QUEUED_MS = 10 * 60 * 1000;
@@ -19,6 +25,7 @@ interface JobLike {
   id: string;
   user_id: string;
   type: string;
+  ref_id: string | null;
   status: string;
   ledger_id: number | null;
   idempotency_key: string;
@@ -44,7 +51,7 @@ export async function runStuckReaper(db: DbClient, queues: Queues): Promise<Reap
 
   const { data: stale, error: staleError } = await db
     .from('jobs')
-    .select('id, user_id, type, status, ledger_id, idempotency_key, meta')
+    .select('id, user_id, type, ref_id, status, ledger_id, idempotency_key, meta')
     .eq('status', 'active')
     .lt('heartbeat_at', new Date(now - STALE_HEARTBEAT_MS).toISOString());
   if (staleError) throw new Error(`Reaper could not read active jobs: ${staleError.message}`);
@@ -56,7 +63,7 @@ export async function runStuckReaper(db: DbClient, queues: Queues): Promise<Reap
 
   const { data: queued, error: queuedError } = await db
     .from('jobs')
-    .select('id, user_id, type, status, ledger_id, idempotency_key, meta')
+    .select('id, user_id, type, ref_id, status, ledger_id, idempotency_key, meta')
     .eq('status', 'queued')
     .lt('queued_at', new Date(now - ORPHAN_QUEUED_MS).toISOString());
   if (queuedError) throw new Error(`Reaper could not read queued jobs: ${queuedError.message}`);
@@ -66,7 +73,11 @@ export async function runStuckReaper(db: DbClient, queues: Queues): Promise<Reap
     const queue = queues[queueForJob(row.type as JobType)];
 
     // Is there still a BullMQ job for this row (original id or a re-queue suffix)?
-    const candidates = [row.idempotency_key, `${row.idempotency_key}-r1`, `${row.idempotency_key}-r2`];
+    const candidates = [
+      row.idempotency_key,
+      `${row.idempotency_key}-r1`,
+      `${row.idempotency_key}-r2`,
+    ];
     let exists = false;
     for (const id of candidates) {
       const bullJob = await queue.getJob(id);
@@ -99,11 +110,24 @@ async function handleStuck(
 
   const queue = queues[queueForJob(job.type as JobType)];
   const attempt = reaped + 1;
+  // The original payload (cover text mode, export formats, audiobook id, box-set books, …) lives in
+  // `jobs.meta`; without it a re-queued processor would run with missing inputs (or silently wrong
+  // defaults), so it must travel with the BullMQ job again.
+  const payload =
+    job.meta && typeof job.meta === 'object' && !Array.isArray(job.meta)
+      ? (job.meta as Record<string, unknown>)
+      : {};
 
   try {
     await queue.add(
       job.type,
-      { jobId: job.id, userId: job.user_id, ledgerId: job.ledger_id },
+      {
+        ...payload,
+        jobId: job.id,
+        userId: job.user_id,
+        refId: job.ref_id,
+        ledgerId: job.ledger_id,
+      },
       { jobId: `${job.idempotency_key}-r${attempt}`, attempts: 1, removeOnComplete: true },
     );
   } catch (err) {

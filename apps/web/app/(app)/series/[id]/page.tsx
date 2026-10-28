@@ -48,11 +48,15 @@ export default async function SeriesRoadmapPage({ params }: { params: Promise<{ 
     chapterCount.set(chapter.book_id, (chapterCount.get(chapter.book_id) ?? 0) + 1);
   }
 
-  const activeJob = new Map<string, { id: string; progress: number; step_label: string | null }>();
+  const activeJob = new Map<
+    string,
+    { id: string; status: 'queued' | 'active'; progress: number; step_label: string | null }
+  >();
   for (const job of jobs ?? []) {
     if (job.ref_id) {
       activeJob.set(job.ref_id, {
         id: job.id,
+        status: job.status as 'queued' | 'active',
         progress: job.progress,
         step_label: job.step_label,
       });
@@ -86,6 +90,7 @@ export default async function SeriesRoadmapPage({ params }: { params: Promise<{ 
       title: book.title,
       premise: book.premise,
       status: book.status as RoadmapPart['status'],
+      jobStatus: job?.status ?? null,
       lengthPreset: book.length_preset as LengthPreset,
       wordCount: book.word_count ?? 0,
       chapterCount: chapterCount.get(book.id) ?? 0,
@@ -111,6 +116,7 @@ export default async function SeriesRoadmapPage({ params }: { params: Promise<{ 
       allowedPresets={account.entitlements.lengthPresets as LengthPreset[]}
       plannedBooks={series.planned_books}
       maxBooks={account.entitlements.maxBooksPerSeries}
+      genre={series.genre}
     />
   );
 }

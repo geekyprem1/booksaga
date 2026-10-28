@@ -154,7 +154,7 @@ async function calibrate(preset: LengthPreset) {
     type: 'book',
     refId: book.id,
     userId,
-    source: { ownerId: userId, pool: 'main', actingUserId: userId },
+    source: { ownerId: userId, pool: 'main' },
     action: bookCreditAction(preset),
     amount: cost?.credits ?? 10,
     payload: { part: 1 },

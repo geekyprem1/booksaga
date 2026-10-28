@@ -3,10 +3,17 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, BookOpen, CheckCircle2, Loader2, Lock, Plus, Sparkles } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowRight,
+  BookOpen,
+  Check,
+  Loader2,
+  Lock,
+  Plus,
+  Sparkles,
+} from 'lucide-react';
 import { LENGTH_PRESETS, type LengthPreset } from '@booksaga/shared';
-import { Badge, Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/input';
 import { JobProgressDialog } from '@/components/jobs/job-progress-dialog';
 import { getBrowserClient } from '@/lib/supabase/client';
@@ -15,7 +22,8 @@ import {
   cancelJobAction,
   generatePartAction,
 } from '@/lib/series/roadmap-actions';
-import { formatNumber } from '@/lib/utils';
+import { cn, formatNumber } from '@/lib/utils';
+import styles from './roadmap.module.css';
 
 export interface RoadmapPart {
   id: string;
@@ -23,6 +31,7 @@ export interface RoadmapPart {
   title: string;
   premise: string;
   status: 'locked' | 'ready' | 'generating' | 'generated' | 'failed';
+  jobStatus: 'queued' | 'active' | null;
   lengthPreset: LengthPreset;
   wordCount: number;
   chapterCount: number;
@@ -41,15 +50,9 @@ export interface RoadmapProps {
   allowedPresets: LengthPreset[];
   plannedBooks: number;
   maxBooks: number;
+  genre?: string;
+  readOnly?: boolean;
 }
-
-const STATUS_VARIANT = {
-  generated: 'success',
-  ready: 'default',
-  generating: 'warning',
-  locked: 'muted',
-  failed: 'danger',
-} as const;
 
 export function Roadmap({
   seriesId,
@@ -59,6 +62,8 @@ export function Roadmap({
   allowedPresets,
   plannedBooks,
   maxBooks,
+  genre,
+  readOnly = false,
 }: RoadmapProps) {
   const router = useRouter();
   const [presetByPart, setPresetByPart] = useState<Record<number, LengthPreset>>(() =>
@@ -69,15 +74,16 @@ export function Roadmap({
   );
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [addCount, setAddCount] = useState(2);
+  const [addCount, setAddCount] = useState(Math.min(2, Math.max(1, maxBooks - plannedBooks)));
 
-  const anyGenerating = parts.some((p) => p.status === 'generating');
+  const anyGenerating = parts.some((p) => p.jobId !== null || p.status === 'generating');
   const written = parts.filter((p) => p.status === 'generated').length;
   const totalWords = parts.reduce((sum, p) => sum + p.wordCount, 0);
 
   // Realtime: any change to this series' books, or to one of the user's jobs, refreshes the server
   // data (progress, statuses, credits). Debounced so a burst of updates costs one render.
   useEffect(() => {
+    if (readOnly) return;
     const supabase = getBrowserClient();
     let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -106,7 +112,7 @@ export function Roadmap({
       if (poll) clearInterval(poll);
       void supabase.removeChannel(channel);
     };
-  }, [seriesId, router, anyGenerating]);
+  }, [seriesId, router, anyGenerating, readOnly]);
 
   async function handleGenerate(part: RoadmapPart) {
     setError(null);
@@ -122,6 +128,7 @@ export function Roadmap({
       return;
     }
     setActiveJob({ jobId: result.data.jobId, kind: 'generate' });
+    router.refresh();
   }
 
   async function handleCancel(part: RoadmapPart) {
@@ -149,197 +156,294 @@ export function Roadmap({
     setActiveJob({ jobId: result.data.jobId, kind: 'extend' });
   }
 
+  const seriesCover = parts.find((part) => part.coverUrl)?.coverUrl;
+
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          <span className="font-semibold text-foreground">
-            {written} of {plannedBooks}
-          </span>{' '}
-          parts written · {formatNumber(totalWords)} words · {credits} credits left
-        </p>
-
-        {plannedBooks < maxBooks ? (
-          <div className="flex items-end gap-2">
-            <label className="text-xs text-muted-foreground">
-              Add parts
-              <Select
-                className="mt-1 h-8 w-20"
-                value={addCount}
-                onChange={(e) => setAddCount(Number(e.target.value))}
-                aria-label="How many parts to add"
-              >
-                {Array.from({ length: Math.min(10, maxBooks - plannedBooks) }, (_, i) => i + 1).map(
-                  (n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ),
-                )}
-              </Select>
-            </label>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={handleAddParts}
-              disabled={busy === 'extend'}
-            >
-              {busy === 'extend' ? (
-                <Loader2 className="animate-spin" aria-hidden="true" />
-              ) : (
-                <Plus aria-hidden="true" />
-              )}
-              Extend arc · 1 credit
-            </Button>
-          </div>
-        ) : null}
-      </div>
-
-      {error ? (
-        <p
-          role="alert"
-          className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-rose-200"
-        >
+    <section className={styles.roadmap} aria-label="Series Roadmap">
+      <header className={styles.header}>
+        <h2>
+          <BookOpen aria-hidden="true" /> Series Roadmap
+        </h2>
+        <p>Your books grow step by step, with the same series continuity.</p>
+        <span className={styles.summary}>
+          {written}/{plannedBooks} written · {formatNumber(totalWords)} words
+        </span>
+        <Link href="/publishing" className={styles.help}>
+          <BookOpen aria-hidden="true" /> How it works
+        </Link>
+      </header>
+      {error && (
+        <p role="alert" className={styles.error}>
           {error}
         </p>
-      ) : null}
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {parts.map((part) => {
-          const preset = LENGTH_PRESETS[part.lengthPreset];
-          const generating = part.status === 'generating';
+      )}
+      <div className={styles.partList} role="region" aria-label="Books in this series" tabIndex={0}>
+        {parts.map((part, index) => {
+          const first = index === 0;
+          const generated = part.status === 'generated';
+          const locked = part.status === 'locked';
+          const generating = part.jobId !== null || part.status === 'generating';
+          const queued = part.jobStatus === 'queued';
           const selected = presetByPart[part.partNumber] ?? part.lengthPreset;
           const cost = costs[selected];
-
+          const actionTone = styles[`tone${index % 6}`];
           return (
-            <Card
+            <article
               key={part.id}
-              className={part.status === 'locked' ? 'opacity-70' : undefined}
               aria-label={`Part ${part.partNumber}`}
+              className={cn(
+                styles.partCard,
+                first && styles.firstPart,
+                locked && styles.lockedPart,
+                actionTone,
+              )}
             >
-              <CardContent className="flex h-full flex-col gap-3 p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold tracking-wide text-muted-foreground">
-                    PART {part.partNumber}
-                  </span>
-                  <Badge variant={STATUS_VARIANT[part.status]}>
-                    {part.status === 'generated' ? (
-                      <CheckCircle2 className="size-3" aria-hidden="true" />
-                    ) : part.status === 'locked' ? (
-                      <Lock className="size-3" aria-hidden="true" />
-                    ) : null}
-                    {part.status}
-                  </Badge>
+              {!first && (
+                <div className={styles.cardBackdrop} aria-hidden="true">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={part.coverUrl ?? seriesCover ?? '/hero/dashboard.webp'}
+                    alt=""
+                    loading="lazy"
+                  />
                 </div>
-
-                <div className="flex flex-1 gap-2">
+              )}
+              {first && (
+                <div className={styles.cover}>
                   {part.coverUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={part.coverUrl}
-                      alt={`Cover for part ${part.partNumber}`}
-                      className="h-20 w-[52px] shrink-0 rounded border border-border object-cover"
-                    />
-                  ) : null}
-                  <div className="min-w-0">
-                    <p className="font-semibold leading-snug">
-                      {part.title || `Part ${part.partNumber}`}
-                    </p>
-                    <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">{part.premise}</p>
-                  </div>
-                </div>
-
-                <p className="text-xs text-muted-foreground">
-                  {preset?.label ?? part.lengthPreset}
-                  {part.wordCount > 0
-                    ? ` · ${formatNumber(part.wordCount)} words · ${part.chapterCount} chapters`
-                    : ''}
-                </p>
-
-                {generating ? (
-                  <div className="flex flex-col gap-2">
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full bg-brand-gradient transition-all"
-                        style={{ width: `${Math.max(part.jobProgress, 3)}%` }}
-                      />
+                    <img src={part.coverUrl} alt={`Cover for part ${part.partNumber}`} />
+                  ) : (
+                    <div className={styles.coverPlaceholder}>
+                      <BookOpen aria-hidden="true" />
+                      <span>BOOK {part.partNumber}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {part.jobStep ?? 'Starting…'} · {part.jobProgress}%
-                    </p>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleCancel(part)}
-                      disabled={busy === `cancel-${part.partNumber}`}
-                    >
-                      {busy === `cancel-${part.partNumber}` ? (
-                        <Loader2 className="animate-spin" aria-hidden="true" />
-                      ) : null}
-                      Cancel
-                    </Button>
-                  </div>
-                ) : part.status === 'generated' ? (
-                  <Button asChild size="sm" variant="secondary">
-                    <Link href={`/series/${seriesId}/books/${part.id}`}>
-                      <BookOpen aria-hidden="true" /> Open Part {part.partNumber}
-                    </Link>
-                  </Button>
-                ) : part.status === 'locked' ? (
-                  <p className="text-xs text-muted-foreground">
-                    Complete Part {part.partNumber - 1} to unlock.
-                  </p>
+                  )}
+                </div>
+              )}
+              <div className={styles.partDetails}>
+                {first ? (
+                  <span className={styles.firstStatus}>
+                    Part {part.partNumber}
+                    <small>
+                      {generated
+                        ? 'Generated'
+                        : locked
+                          ? 'Locked'
+                          : generating
+                            ? queued
+                              ? 'Queued'
+                              : 'Writing'
+                            : 'Ready'}
+                    </small>
+                  </span>
                 ) : (
-                  <div className="flex flex-col gap-2">
-                    {allowedPresets.length > 1 ? (
+                  <div className={styles.stateIcon}>
+                    {generated ? (
+                      <Check aria-hidden="true" />
+                    ) : locked ? (
+                      <Lock aria-hidden="true" />
+                    ) : generating ? (
+                      <Loader2 className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Sparkles aria-hidden="true" />
+                    )}
+                  </div>
+                )}
+                {first ? (
+                  <>
+                    <h3 className={styles.bookTitle}>{part.title || `Part ${part.partNumber}`}</h3>
+                    {genre && <span className={styles.genre}>{genre}</span>}
+                  </>
+                ) : (
+                  <h3 className={styles.partTitle} title={part.title}>
+                    Part {part.partNumber}
+                  </h3>
+                )}
+                {!first && (
+                  <p className={styles.status}>
+                    {generated
+                      ? 'Generated'
+                      : locked
+                        ? 'Not generated yet'
+                        : generating
+                          ? queued
+                            ? 'Waiting in queue'
+                            : 'Writing your book'
+                          : part.status === 'failed'
+                            ? 'Ready to retry'
+                            : 'Ready to generate'}
+                  </p>
+                )}
+                <p className={styles.description} title={part.premise}>
+                  {generating
+                    ? `${part.jobStep ?? (queued ? 'Waiting for an available writer' : 'Starting')} · ${part.jobProgress}%`
+                    : first
+                      ? part.premise
+                      : generated
+                        ? 'Open this book and continue editing.'
+                        : locked
+                          ? `Complete Part ${part.partNumber - 1} to unlock this book.`
+                          : 'Continue the same cast, world and series.'}
+                </p>
+              </div>
+              <div className={styles.partActions}>
+                {generating ? (
+                  <>
+                    <div
+                      className={styles.progress}
+                      role="progressbar"
+                      aria-label={`Part ${part.partNumber} progress`}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={part.jobProgress}
+                    >
+                      <span style={{ width: `${part.jobProgress}%` }} />
+                    </div>
+                    <span className={styles.jobLabel} aria-live="polite">
+                      {queued ? 'Queued' : 'Writing'} · {part.jobProgress}%
+                    </span>
+                    <button
+                      type="button"
+                      className={styles.actionButton}
+                      onClick={() =>
+                        part.jobId && setActiveJob({ jobId: part.jobId, kind: 'generate' })
+                      }
+                      disabled={!part.jobId}
+                    >
+                      <BookOpen aria-hidden="true" />
+                      View progress
+                    </button>
+                    <button
+                      type="button"
+                      className={cn(styles.actionButton, styles.cancelButton)}
+                      onClick={() => handleCancel(part)}
+                      disabled={readOnly || busy !== null || !part.jobId}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : generated ? (
+                  <Link
+                    href={`/series/${seriesId}/books/${part.id}`}
+                    className={styles.actionButton}
+                    aria-label={`Open Part ${part.partNumber}`}
+                  >
+                    <BookOpen aria-hidden="true" />
+                    <span>Open Part {part.partNumber}</span>
+                  </Link>
+                ) : locked ? (
+                  <>
+                    <span className="sr-only">Complete Part {part.partNumber - 1} to unlock.</span>
+                    <button
+                      type="button"
+                      disabled
+                      className={styles.actionButton}
+                      aria-label={`Generate Part ${part.partNumber} (locked)`}
+                    >
+                      <Sparkles aria-hidden="true" />
+                      <span>Generate Part {part.partNumber}</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {allowedPresets.length > 1 && (
                       <Select
                         aria-label={`Length for part ${part.partNumber}`}
-                        className="h-8"
+                        className={styles.lengthSelect}
                         value={selected}
-                        onChange={(e) =>
-                          setPresetByPart((prev) => ({
-                            ...prev,
-                            [part.partNumber]: e.target.value as LengthPreset,
+                        onChange={(event) =>
+                          setPresetByPart((current) => ({
+                            ...current,
+                            [part.partNumber]: event.target.value as LengthPreset,
                           }))
                         }
                       >
-                        {allowedPresets.map((p) => (
-                          <option key={p} value={p}>
-                            {LENGTH_PRESETS[p].label} · {costs[p]} cr
+                        {allowedPresets.map((preset) => (
+                          <option key={preset} value={preset}>
+                            {LENGTH_PRESETS[preset].label} · {costs[preset]} cr
                           </option>
                         ))}
                       </Select>
-                    ) : null}
-                    <Button
+                    )}
+                    <button
                       type="button"
-                      size="sm"
+                      className={styles.actionButton}
                       onClick={() => handleGenerate(part)}
-                      disabled={busy === `generate-${part.partNumber}` || credits < (cost ?? 0)}
+                      disabled={readOnly || busy !== null || credits < (cost ?? 0)}
+                      aria-label={`${part.status === 'failed' ? 'Retry' : 'Generate'} Part ${part.partNumber} · ${cost} credits`}
                     >
                       {busy === `generate-${part.partNumber}` ? (
                         <Loader2 className="animate-spin" aria-hidden="true" />
                       ) : (
                         <Sparkles aria-hidden="true" />
                       )}
-                      {part.status === 'failed' ? 'Retry' : `Generate Part ${part.partNumber}`} ·{' '}
-                      {cost} cr
-                    </Button>
-                    {part.status === 'failed' ? (
-                      <p className="flex items-center gap-1 text-xs text-amber-300">
-                        <AlertTriangle className="size-3" aria-hidden="true" /> Last attempt failed —
-                        credits were refunded.
-                      </p>
-                    ) : null}
-                  </div>
+                      <span>
+                        {part.status === 'failed' ? 'Retry' : 'Generate'} Part {part.partNumber}
+                      </span>
+                    </button>
+                    {part.status === 'failed' && (
+                      <span
+                        className={styles.refund}
+                        title="Last attempt failed. Credits were refunded."
+                      >
+                        <AlertTriangle aria-hidden="true" /> Refunded
+                      </span>
+                    )}
+                  </>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+              {first && (
+                <Link href={`/series/${seriesId}`} className={styles.continueLink}>
+                  <ArrowRight aria-hidden="true" /> Continue series
+                </Link>
+              )}
+            </article>
           );
         })}
+        {!readOnly && plannedBooks < maxBooks && (
+          <div className={styles.addCard}>
+            <span className={styles.addIcon}>
+              <Plus aria-hidden="true" />
+            </span>
+            <strong>
+              Add more
+              <br />
+              parts
+            </strong>
+            <p>Expand the same series.</p>
+            <Select
+              aria-label="How many parts to add"
+              className={styles.lengthSelect}
+              value={addCount}
+              onChange={(event) => setAddCount(Number(event.target.value))}
+            >
+              {Array.from(
+                { length: Math.min(10, maxBooks - plannedBooks) },
+                (_, index) => index + 1,
+              ).map((count) => (
+                <option key={count} value={count}>
+                  +{count} {count === 1 ? 'part' : 'parts'}
+                </option>
+              ))}
+            </Select>
+            <button
+              type="button"
+              className={styles.extendButton}
+              onClick={handleAddParts}
+              disabled={busy !== null || credits < 1}
+              aria-label="Extend arc · 1 credit"
+            >
+              {busy === 'extend' ? (
+                <Loader2 className="animate-spin" aria-hidden="true" />
+              ) : (
+                <ArrowRight aria-hidden="true" />
+              )}
+            </button>
+            <small>1 credit</small>
+          </div>
+        )}
       </div>
-
       <JobProgressDialog
         jobId={activeJob?.jobId ?? null}
         title={activeJob?.kind === 'extend' ? 'Extending the series arc' : 'Writing the next part'}
@@ -354,6 +458,6 @@ export function Roadmap({
           router.refresh();
         }}
       />
-    </div>
+    </section>
   );
 }

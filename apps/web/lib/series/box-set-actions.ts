@@ -67,7 +67,7 @@ export async function createBoxSetAction(
       type: 'box_set',
       refId: seriesId,
       userId: user.id,
-      source: { ownerId: user.id, pool: 'main', actingUserId: user.id },
+      source: { ownerId: user.id, pool: 'main' },
       action: 'cover',
       amount: withCover ? cost.credits : 0,
       skipCredits: !withCover,

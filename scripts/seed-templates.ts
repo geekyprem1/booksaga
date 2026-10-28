@@ -1,15 +1,15 @@
 /**
  * Seed the Series Templates library (T6.6).
  *
- * 12 categories × 10 templates. Idempotent by slug, so running it twice never duplicates. Covers
- * are generated with the same pipeline as real books (mock art in AI_MODE=mock).
+ * Default: 12 categories × 10 templates. --starter: 10 curated, complete lite templates.
+ * Idempotent by slug and AI-text cover path. Legacy engine-lettered covers are replaced in place.
  *
- *   pnpm tsx scripts/seed-templates.ts [--covers=false]
+ *   pnpm tsx scripts/seed-templates.ts [--starter | --covers=false]
  */
 import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { createAi } from '@booksaga/ai';
-import { composeCover, defaultLayers } from '@booksaga/exporters';
+import sharp from 'sharp';
 
 const env = Object.fromEntries(
   readFileSync('.env.local', 'utf8')
@@ -27,19 +27,32 @@ const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE
 
 const ai = createAi({
   mode: (env.AI_MODE as 'mock' | 'live') ?? 'mock',
-  model: env.OPENROUTER_TEXT_MODEL ?? 'mock',
-  apiKey: env.OPENROUTER_API_KEY,
+  baseUrl: env.TEXT_API_BASE_URL || undefined,
+  model: env.TEXT_MODEL || 'mock',
+  apiKey: env.TEXT_API_KEY,
   replicateToken: env.REPLICATE_API_TOKEN,
-  imageQuality: 'low',
+  imageModel: env.REPLICATE_IMAGE_MODEL || 'openai/gpt-image-2',
   db: undefined,
 });
 
 const withCovers = !process.argv.includes('--covers=false');
+const starterMode = process.argv.includes('--starter');
 
 interface Entry {
   title: string;
   premise: string;
   tone: string;
+}
+
+interface StarterEntry extends Entry {
+  category: string;
+  genre: string;
+  audience: string;
+  length_preset: 'short' | 'standard';
+  planned_books: 3 | 4 | 5;
+  keywords: string[];
+  cover_prompt: string;
+  cover_font: 'display' | 'serif' | 'sans';
 }
 
 const CATALOG: Record<string, { genre: string; audience: string; entries: Entry[] }> = {
@@ -244,60 +257,103 @@ const slugify = (value: string) =>
     .replace(/^-+|-+$/g, '');
 
 async function main() {
+  if (starterMode && !withCovers) {
+    throw new Error('--starter requires actual covers; --covers=false is only supported for the full catalog.');
+  }
+  if (withCovers && env.AI_MODE !== 'live') {
+    throw new Error('Template AI-text covers require AI_MODE=live; use --covers=false only for the full catalog.');
+  }
+  if (withCovers && !env.REPLICATE_API_TOKEN) {
+    throw new Error('Template AI-text covers require REPLICATE_API_TOKEN; mock artwork cannot render the cover title.');
+  }
+
+  const catalog: [string, { genre: string; audience: string; entries: Entry[] }][] = starterMode
+    ? (JSON.parse(readFileSync(new URL('./data/starter-templates.json', import.meta.url), 'utf8')) as StarterEntry[])
+        .map((entry) => [entry.category, { genre: entry.genre, audience: entry.audience, entries: [entry] }])
+    : Object.entries(CATALOG);
+  const count = catalog.reduce((total, [, config]) => total + config.entries.length, 0);
+  const mode = starterMode ? 'starter' : 'full-catalog';
+  console.log(`[seed-templates] mode=${mode}, templates=${count}, covers=${withCovers}, quality=low, text=ai`);
+
   let created = 0;
+  let updated = 0;
   let skipped = 0;
   let covers = 0;
 
-  for (const [category, config] of Object.entries(CATALOG)) {
+  for (const [category, config] of catalog) {
     for (const [index, entry] of config.entries.entries()) {
+      const starter = starterMode ? entry as StarterEntry : undefined;
       const slug = `${category}-${slugify(entry.title)}`;
-      const { data: existing } = await db
+      const { data: existing, error: lookupError } = await db
         .from('templates')
-        .select('id')
+        .select('id, cover_path, is_published')
         .eq('slug', slug)
         .maybeSingle();
 
-      if (existing) {
+      if (lookupError && starterMode) {
+        throw new Error(`[seed-templates] lookup failed for ${slug}: ${lookupError.message}`);
+      }
+      if (starterMode && existing && !existing.is_published) {
+        throw new Error(`[seed-templates] existing starter ${slug} is unpublished. Resolve it before rerunning.`);
+      }
+      if (existing && (!withCovers || existing.cover_path === `templates/${slug}-ai-text.jpg`)) {
         skipped += 1;
+        console.log(`[seed-templates] skipped existing AI-text ${slug}`);
         continue;
       }
 
-      const tier = index < 4 ? 'lite' : 'full';
+      const tier = starterMode || index < 4 ? 'lite' : 'full';
       let coverPath: string | null = null;
 
       if (withCovers) {
         try {
+          const font = starter?.cover_font ?? (index % 3 === 0 ? 'display' : index % 3 === 1 ? 'serif' : 'sans');
+          const typography = font === 'display' ? 'dramatic, elegant display lettering' : font === 'serif' ? 'refined literary serif lettering' : 'bold contemporary sans-serif lettering';
           const art = await ai.image({
-            prompt: `Book cover artwork, no text: ${entry.premise} Genre: ${config.genre}. Moody, cinematic, painterly.`,
+            prompt: [
+              'Generate a complete, flat front book cover with AI-rendered typography integrated into the artwork. This is the finished cover, not a textless background or a physical book mockup.',
+              starter?.cover_prompt ?? `Illustrate this premise: ${entry.premise} Genre: ${config.genre}. Moody, cinematic, painterly.`,
+              `Render the exact title ${JSON.stringify(entry.title)} as the dominant, clearly readable text, using ${typography} appropriate to the genre.`,
+              'Render the exact author/publisher credit "BookSaga" discreetly at the bottom. No other words, invented taglines, logos or watermarks.',
+              'Spell every title word exactly. Compose the lettering professionally, with strong contrast and generous spacing so it remains readable at thumbnail size.',
+              'Keep all lettering at least 12 percent inside every image edge, with the title in the upper third and the publisher credit above the bottom safe margin. Do not crop any letter.',
+            ].join('\n'),
             aspectRatio: '1024x1536',
+            quality: 'low',
             usage: { userId: '00000000-0000-0000-0000-000000000000', jobId: 'seed-templates', purpose: 'template_cover' },
           });
 
-          const layers = defaultLayers({
-            seriesTitle: category.replace(/-/g, ' '),
-            title: entry.title,
-            partNumber: 1,
-            author: 'BookSaga',
-          });
+          // Resize/encode only: all visible lettering comes from the AI image, never an engine overlay.
+          const composed = await sharp(art.buffer)
+            .resize(1600, 2560, { fit: 'cover', position: 'centre' })
+            .jpeg({ quality: 92 })
+            .toBuffer();
 
-          const composed = await composeCover({
-            art: art.buffer,
-            width: 1600,
-            height: 2560,
-            layers,
-            fontFamily: index % 3 === 0 ? 'display' : index % 3 === 1 ? 'serif' : 'sans',
-          });
-
-          coverPath = `templates/${slug}.jpg`;
+          coverPath = `templates/${slug}-ai-text.jpg`;
           const upload = await db.storage
             .from('covers')
             .upload(coverPath, composed, { contentType: 'image/jpeg', upsert: true });
-          if (upload.error) coverPath = null;
-          else covers += 1;
+          if (upload.error) {
+            if (starterMode) throw new Error(`Cover upload failed: ${upload.error.message}`);
+            coverPath = null;
+          } else {
+            covers += 1;
+          }
         } catch (err) {
-          console.warn(`[seed-templates] cover failed for ${slug}:`, err instanceof Error ? err.message : err);
+          const message = err instanceof Error ? err.message : String(err);
+          if (starterMode) throw new Error(`[seed-templates] cover failed for ${slug}: ${message}`);
+          console.warn(`[seed-templates] cover failed for ${slug}: ${message}`);
         }
       }
+      if (existing) {
+        if (!coverPath) continue;
+        const { error } = await db.from('templates').update({ cover_path: coverPath }).eq('id', existing.id);
+        if (error) throw new Error(`[seed-templates] cover update failed for ${slug}: ${error.message}`);
+        updated += 1;
+        console.log(`[seed-templates] updated AI-text cover ${slug}, cover=${coverPath}`);
+        continue;
+      }
+
 
       const { error } = await db.from('templates').insert({
         slug,
@@ -308,24 +364,26 @@ async function main() {
         genre: config.genre,
         tone: entry.tone,
         audience: config.audience,
-        length_preset: index % 5 === 0 ? 'full' : index % 3 === 0 ? 'short' : 'standard',
-        planned_books: [6, 9, 6, 12][index % 4],
-        keywords: [config.genre.toLowerCase(), entry.tone.split(',')[0]!.trim(), 'series'],
+        length_preset: starter?.length_preset ?? (index % 5 === 0 ? 'full' : index % 3 === 0 ? 'short' : 'standard'),
+        planned_books: starter?.planned_books ?? [6, 9, 6, 12][index % 4],
+        keywords: starter?.keywords ?? [config.genre.toLowerCase(), entry.tone.split(',')[0]!.trim(), 'series'],
         cover_path: coverPath,
         tier,
-        sort_order: index,
+        ...(starterMode ? { is_published: true } : {}),
+        sort_order: starterMode ? created + updated + skipped : index,
       });
 
       if (error) {
+        if (starterMode) throw new Error(`[seed-templates] insert failed for ${slug}: ${error.message}`);
         console.error(`[seed-templates] insert failed for ${slug}: ${error.message}`);
         continue;
       }
       created += 1;
-      if (created % 10 === 0) console.log(`[seed-templates] ${created} created…`);
+      console.log(`[seed-templates] created ${slug} (${entry.title}), tier=${tier}, cover=${coverPath ?? 'none'}`);
     }
   }
 
-  console.log(`[seed-templates] done — created ${created}, skipped ${skipped}, covers ${covers}`);
+  console.log(`[seed-templates] done — mode=${mode}, templates=${count}, created ${created}, updated ${updated}, skipped ${skipped}, covers ${covers}, text=ai`);
 }
 
 await main();

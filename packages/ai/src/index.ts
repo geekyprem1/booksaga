@@ -11,7 +11,12 @@
 import type { z } from 'zod';
 import { completeJson } from './json';
 import { mockComplete } from './mock';
-import { openRouterComplete, type OpenRouterOptions } from './openrouter';
+import {
+  isOpenRouterUrl,
+  openRouterComplete,
+  textProviderName,
+  type OpenRouterOptions,
+} from './openrouter';
 import { mockImage, replicateImage, type ReplicateOptions } from './replicate';
 import { mockSpeech, replicateSpeech } from './speech';
 import {
@@ -32,7 +37,13 @@ export * from './types';
 export * from './usage';
 export { extractJson, completeJson } from './json';
 export { mockComplete } from './mock';
-export { backoffDelay, isRetryableStatus } from './openrouter';
+export {
+  backoffDelay,
+  isRetryableStatus,
+  isOpenRouterUrl,
+  textProviderName,
+  DEFAULT_TEXT_BASE_URL,
+} from './openrouter';
 export { replicateImage, mockImage } from './replicate';
 export { replicateSpeech, mockSpeech } from './speech';
 
@@ -55,11 +66,12 @@ export interface CreateAiOptions {
   baseUrl?: string;
   timeoutMs?: number;
   maxAttempts?: number;
+  /** Reasoning effort for non-OpenRouter text providers (`reasoning_effort` field). */
+  reasoningEffort?: 'low' | 'medium' | 'high';
 
   /** Replicate (image generation). */
   replicateToken?: string;
   imageModel?: string;
-  imageQuality?: 'low' | 'medium' | 'high' | 'auto';
 
   /** Replicate TTS (audiobooks). */
   speechModel?: string;
@@ -76,6 +88,7 @@ export function createAi(opts: CreateAiOptions): AiClient {
           baseUrl: opts.baseUrl,
           timeoutMs: opts.timeoutMs,
           maxAttempts: opts.maxAttempts,
+          reasoningEffort: opts.reasoningEffort,
         }
       : null;
 
@@ -88,12 +101,14 @@ export function createAi(opts: CreateAiOptions): AiClient {
         }
       : null;
 
-  if (live && !live.apiKey) {
+  // OpenRouter always needs a key; a self-hosted OpenAI-compatible server may not.
+  if (live && !live.apiKey && isOpenRouterUrl(live.baseUrl)) {
     throw new AiError(
       'AI_NOT_CONFIGURED',
-      'OPENROUTER_API_KEY is missing. Set it, or run with AI_MODE=mock.',
+      'TEXT_API_KEY is missing. Set it, or run with AI_MODE=mock.',
     );
   }
+  const textProvider = live ? textProviderName(live.baseUrl) : 'mock';
 
   const complete = async (
     req: TextRequest & { json?: boolean },
@@ -103,7 +118,7 @@ export function createAi(opts: CreateAiOptions): AiClient {
       await logUsage(opts.db, {
         userId: req.usage.userId,
         jobId: req.usage.jobId,
-        provider: live ? 'openrouter' : 'mock',
+        provider: textProvider,
         model: result.model,
         purpose: req.usage.purpose,
         inputTokens: result.inputTokens,
@@ -122,10 +137,9 @@ export function createAi(opts: CreateAiOptions): AiClient {
     json: <S extends z.ZodTypeAny>(req: JsonRequest<S>) => completeJson(complete, req),
 
     image: async (req) => {
-      const quality = req.quality ?? opts.imageQuality ?? 'low';
       const result = replicate
-        ? await replicateImage(replicate, { ...req, quality })
-        : mockImage({ ...req, quality });
+        ? await replicateImage(replicate, req)
+        : mockImage(req);
 
       if (opts.db) {
         await logUsage(opts.db, {

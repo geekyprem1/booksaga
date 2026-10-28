@@ -1,6 +1,6 @@
 /**
- * OpenRouter chat-completions client (T2.2). OpenAI-compatible, so the body/response shapes are
- * the familiar ones. Everything here is deliberately dependency-free (global fetch) so the worker
+ * OpenAI-compatible chat-completions client (T2.2). Defaults to OpenRouter; set `baseUrl`
+ * (env `TEXT_API_BASE_URL`) to use any other OpenAI-compatible provider. Everything here is deliberately dependency-free (global fetch) so the worker
  * does not pull an SDK for one endpoint.
  *
  * Reasoning models (DeepSeek V4.1 Flash) spend a large share of `max_tokens` on hidden reasoning.
@@ -32,6 +32,11 @@ export interface OpenRouterOptions {
   pricing?: Record<string, ModelPricing>;
   /** `null` disables the reasoning hint entirely. */
   reasoning?: ReasoningOptions | null;
+  /**
+   * Reasoning effort for non-OpenRouter providers, sent as the `reasoning_effort` field.
+   * Unset = don't send anything (strict providers reject unknown fields).
+   */
+  reasoningEffort?: 'low' | 'medium' | 'high';
 }
 
 interface OpenRouterResponse {
@@ -66,11 +71,40 @@ export function backoffDelay(attempt: number, baseMs = 500): number {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export const DEFAULT_TEXT_BASE_URL = 'https://openrouter.ai/api/v1';
+
+/** True when the endpoint is OpenRouter (enables its `reasoning` param and attribution headers). */
+export function isOpenRouterUrl(baseUrl: string | undefined): boolean {
+  try {
+    const host = new URL(baseUrl ?? DEFAULT_TEXT_BASE_URL).hostname;
+    return host === 'openrouter.ai' || host.endsWith('.openrouter.ai');
+  } catch {
+    return false;
+  }
+}
+
+/** Short provider label for logs and `ai_usage_log.provider` ("openrouter", "api.openai.com"…). */
+export function textProviderName(baseUrl: string | undefined): string {
+  if (isOpenRouterUrl(baseUrl)) return 'openrouter';
+  try {
+    return new URL(baseUrl ?? DEFAULT_TEXT_BASE_URL).hostname;
+  } catch {
+    return 'openai-compatible';
+  }
+}
+
+/**
+ * Chat completion against any OpenAI-compatible endpoint. OpenRouter-only extras (`reasoning`,
+ * `HTTP-Referer`, `X-Title`) are sent only when the base URL is OpenRouter, because strict
+ * providers (e.g. api.openai.com) reject unknown body params with a 400.
+ */
 export async function openRouterComplete(
   opts: OpenRouterOptions,
   req: TextRequest & { json?: boolean },
 ): Promise<TextResult> {
-  const baseUrl = (opts.baseUrl ?? 'https://openrouter.ai/api/v1').replace(/\/$/, '');
+  const baseUrl = (opts.baseUrl ?? DEFAULT_TEXT_BASE_URL).replace(/\/$/, '');
+  const openRouter = isOpenRouterUrl(baseUrl);
+  const label = textProviderName(baseUrl);
   const timeoutMs = opts.timeoutMs ?? 180_000;
   const maxAttempts = opts.maxAttempts ?? 3;
 
@@ -85,17 +119,26 @@ export async function openRouterComplete(
     };
     if (typeof req.temperature === 'number') body.temperature = req.temperature;
     if (req.json) body.response_format = { type: 'json_object' };
-    if (opts.reasoning !== null) body.reasoning = opts.reasoning ?? DEFAULT_REASONING;
+    if (openRouter) {
+      if (opts.reasoning !== null) body.reasoning = opts.reasoning ?? DEFAULT_REASONING;
+    } else if (opts.reasoningEffort) {
+      body.reasoning_effort = opts.reasoningEffort;
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    // Local servers (Ollama, vLLM) often run without a key.
+    if (opts.apiKey) headers.Authorization = `Bearer ${opts.apiKey}`;
+    if (openRouter) {
+      headers['HTTP-Referer'] = opts.referer ?? 'https://booksaga.app';
+      headers['X-Title'] = opts.title ?? 'BookSaga';
+    }
 
     try {
       const res = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${opts.apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': opts.referer ?? 'https://booksaga.app',
-          'X-Title': opts.title ?? 'BookSaga',
-        },
+        headers,
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(timeoutMs),
       });
@@ -105,13 +148,13 @@ export async function openRouterComplete(
         if (isRetryableStatus(res.status) && attempt < maxAttempts) {
           lastError = new AiError(
             'AI_UNAVAILABLE',
-            `OpenRouter ${res.status}: ${text.slice(0, 300)}`,
+            `${label} ${res.status}: ${text.slice(0, 300)}`,
             { status: res.status },
           );
           await sleep(backoffDelay(attempt));
           continue;
         }
-        throw new AiError('AI_UNAVAILABLE', `OpenRouter ${res.status}: ${text.slice(0, 300)}`, {
+        throw new AiError('AI_UNAVAILABLE', `${label} ${res.status}: ${text.slice(0, 300)}`, {
           status: res.status,
         });
       }
@@ -134,7 +177,7 @@ export async function openRouterComplete(
       if (typeof content !== 'string' || content.length === 0) {
         throw new AiError(
           'AI_INVALID_RESPONSE',
-          `OpenRouter returned an empty completion (finish: ${finish ?? 'unknown'}).`,
+          `${label} returned an empty completion (finish: ${finish ?? 'unknown'}).`,
         );
       }
 
@@ -162,5 +205,5 @@ export async function openRouterComplete(
   }
 
   if (lastError instanceof AiError) throw lastError;
-  throw new AiError('AI_UNAVAILABLE', 'OpenRouter request failed.', { cause: lastError });
+  throw new AiError('AI_UNAVAILABLE', `${label} request failed.`, { cause: lastError });
 }

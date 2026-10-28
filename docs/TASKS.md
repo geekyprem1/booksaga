@@ -63,6 +63,8 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
   - _Depends:_ T1.14
 - [x] **T1.16** 🎨 App shell: Sidebar (PRD §8.0 order, lock icons via entitlements), Topbar (⌘K placeholder, CreditsPill, NotificationBell placeholder, user menu), responsive (mobile drawer)
   - _Depends:_ T1.12, T1.13
+  - Desktop sidebar and mobile drawer keep plain dark navigation surfaces; newly AI-generated `public/hero/sidebar-reading-room.webp` (open book, stacked hardbacks and brass reading lamp) appears only after the final navigation item/Admin, never behind menu labels. The obsolete SVG backdrop was removed.
+  - Sidebar labels use 15px semibold white text and larger icons on dark, bordered navigation panels; locked links retain readable labels and lock indicators; rows are at least 44px high on desktop and mobile.
 - [x] **T1.17** ⚙️ `scripts/create-admin.ts` (CLI: email, name, password generate, role=admin)
   - _Done when:_ script chalane ke baad admin `/admin` khol sake.
   - _Depends:_ T1.14
@@ -124,6 +126,7 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
 - [x] **T2.9** ⚙️ System cron: `stuck_reaper` (10 min; stale heartbeat 5 min + orphan queued jobs 10 min). (Credit reset cron nahi hai, credits one-time hain)
   - _Done when:_ active job ke worker ko kill karne pe job re-queue ho, aur 2 baar ke baad fail + refund ho. Orphan queued job (DB me hai, BullMQ me nahi) re-add ho.
   - _Depends:_ T2.7
+  - Recovery retains the original `ref_id` as the processor's `refId`, including stale active and orphan queued jobs. Live recovery verified: the same book/job/reservation resumed at continuity with all nine saved chapters retained; no new credit reservation.
 
 ### 2.4 Pipeline
 
@@ -147,10 +150,12 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
 
 - [x] **T2.17** 🎨 Create Series page (PRD §8.3): form + validation, pen name select/add, collapsible Book 1 & Publishing Settings, length presets (Full locked agar plan me nahi), credit cost dikhe button pe, hero banner
   - _Depends:_ T2.1, T1.16
+  - Writing studio presentation: newly AI-generated typewriter/desk hero, numbered idea and publishing panels, large selectable book-length cards, live series summary, consolidated AI tools, and a clear credit-priced generation footer. Existing validation, template prefills and generation actions are unchanged.
 - [x] **T2.18** 🎨 Enhance with AI flow (job → result preview → "Apply")
   - _Depends:_ T2.16, T2.17
 - [x] **T2.19** 🎨 Generate Part 1 → live progress modal ("Writing chapter X of Y"), realtime `useJob` hook + polling fallback, success modal "Series Foundation Saved" (Continue This Series / View Series), failure state + Retry
   - _Depends:_ T2.15, T2.17
+  - Progress recovery: queued/active book jobs reopen after reload; closing the modal preserves an inline tracker. Real saved percentages, chapter counts and stage checklist distinguish waiting, loading, connection errors and stale heartbeats. Browser smoke covered queued → active, close/reopen/reload, offline recovery, closed-modal completion, failure/cancellation dismissal and New series reset without paid generation.
 - [x] **T2.20** 🎨 AI Assistant & Tools panel (AI Suggestions, Auto-Generate Covers toggle, Series Continuity link, Publishing Structure, Auto/Library/Upload tabs; cover parts M4 tak "coming" state)
   - _Depends:_ T2.17
 
@@ -168,6 +173,9 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
 
 - [x] **T3.1** 🎨 Series detail → Roadmap (PRD §8.4): part cards (generated/ready/locked/generating/failed), realtime updates, per-part length select, Generate Part N (sequential rule enforced server-side), tabs shell
   - _Depends:_ T2.19
+  - Roadmap presentation: larger 2:3 cover thumbnails, 324px-minimum book cards, serif book titles, readable controls, and a horizontally scrollable shelf on narrow screens.
+  - Series overview: shared books-and-quill artwork with dark readability overlays, wrapping long titles, and distinct colored tab buttons with brighter, underlined selected states and horizontal-only scrolling on small screens.
+  - Queued and active jobs take precedence over a book's `ready` status in Roadmap and My Series: show Queued/Writing, exact progress and View progress instead of another Generate button. Polling fallback covers queued jobs too.
 - [x] **T3.2** ⚙️🎨 Add More Parts: AI arc extend (`arc_extend` job, 1 credit), naye `books` rows (locked/ready), plan limit check (FE 5, baaki hard max 30)
   - _Depends:_ T3.1
 - [x] **T3.3** 🎨 My Series (PRD §8.5): grid/list, search, filters, sort, Duplicate, Archive, Delete (soft) + Trash restore (30 din), purge cron
@@ -207,6 +215,7 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
 - [x] **T4.1** 🗄️ Migration `0005_covers.sql`: `covers` (`page_count`, `stale` ke saath), `images` (buckets aur unki policies T1.6 me ban chuke hain)
 - [x] **T4.2** 🤖 `packages/ai/replicate.ts` image: gpt-image-2 input mapping (Replicate model schema verify karna: 1856×2784 size support, quality values, reference images), output fetch, retries, usage
   - _Done when:_ 1856×2784 low-quality image generate ho aur uska cost log ho. Agar ye size support na ho toh nearest supported size + upscale plan PRD me update karo.
+  - Cover cost policy: GPT Image 2 and low quality are enforced in env validation and the provider payload; medium/high/auto are rejected. Published low-image estimate is $0.012 (24 Oct 2026), not a guaranteed $0.01 invoice.
 - [x] **T4.3** ⚙️ Fonts pack (~30 OFL fonts self-hosted) + `exporters/cover/compose.ts` (`@napi-rs/canvas`, normalized layers JSON → JPG; server output canonical)
   - _Done when:_ same layers JSON browser (Konva) aur server dono me render ho aur screenshot-diff tolerance ke andar ho.
 - [x] **T4.4** ⚙️ `processors/image/cover.ts`: prompt builder (series style + book scene + no-text / ai_text), reference image (part > 1), save original art (1856×2784), ebook crop 1600×2560, overlay compose, `covers` row, `is_active` switch
@@ -215,6 +224,7 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
   - _Depends:_ T4.4
 - [x] **T4.6** 🎨 Cover Studio (PRD §8.9): book select, Generate (2 credits), variations history, Konva editor (text layers, fonts, colors, effects, positions), AI Text Mode toggle + spelling warning, Save → server compose, Set active
   - _Depends:_ T4.4
+  - Cover gallery: larger display cards with framed, uncropped covers and book-spine depth; readable serif titles; labeled generation, editing and image-library controls; larger variation thumbnails; matching locked placeholders; responsive shelf and visible keyboard focus.
 - [x] **T4.7** 🎨 Cover sources: Library (user images + preset backgrounds), Upload (MIME sniff, 10MB, sharp re-encode)
   - _Depends:_ T4.1
 - [x] **T4.8** ⚙️ Auto-Generate Covers toggle: book generate hone ke baad cover job enqueue ho (agar balance ho; warna notification)
@@ -238,6 +248,7 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
 - [x] **T5.4** ⚙️ Print PDF exporter: Paged.js templates per trim size (5×8, 5.25×8, 5.5×8.5, 6×9), mirrored margins by page count, bleed, running headers, page numbers, recto chapter starts, embedded fonts. Playwright render
   - _Done when:_ PDF page size trim (+bleed) ke barabar ho, margins spec match karein (automated check), aur actual page count save ho.
   - _Depends:_ T2.14, T5.2
+  - PDF font paths use Node filesystem resolution rather than directory asset URLs, keeping the shared print module compatible with Next.js/Turbopack and worker-side font embedding.
 - [x] **T5.5** ⚙️ DOCX exporter (headings, page breaks, TOC field, front matter)
   - _Depends:_ T2.14, T5.2
 - [x] **T5.6** ⚙️ Metadata TXT + CSV (AI disclosure note ke saath)
@@ -280,10 +291,12 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
 - [x] **T6.6** ⚙️🤖 `seed_templates` job + `scripts/seed-templates.ts`: 12 categories × 10, DeepSeek se template JSON, gpt-image-2 se sample cover. Idempotent (slug), progress admin pe dikhe, tier assign (40 lite)
   - _Done when:_ 120 templates + covers DB me hon, aur dobara run karne pe duplicates na banein.
   - _Depends:_ T6.5, T4.2
+  - `--starter` seeds ten original published lite templates from `scripts/data/starter-templates.json`, each with an AI-lettered low-quality GPT Image 2 cover and 3–5 planned books. Legacy engine covers are updated in place; no engine text is added. Verified: ten low-quality AI-text predictions, stored images exactly match resize/JPEG conversion of the AI output, and rerun skips all ten without extra generation.
 - [x] **T6.7** ⚙️🤖 `scripts/seed-dfy.ts`: 500+ DFY series ideas by niche, blurb templates, keyword packs by genre
   - _Depends:_ T6.5
 - [x] **T6.8** 🎨 Series Templates page (PRD §8.8): hero, category tabs, search, cards (badge, cover), lite/full gating, template detail, "Use This Template" → Create Series prefill
   - _Depends:_ T6.6, T2.17
+  - Compact gallery: six cards per row from 1280px desktop width, responsive fewer-column layouts below that, and full 5:8 cover proportions so generated lettering is not cropped. Desktop layout and mobile template selection verified.
 - [x] **T6.9** 🎨 DFY Ideas & Packs pages (browse, copy, "Use idea" → Create Series)
   - _Depends:_ T6.7
 - [x] **T6.10** 🎨 Admin → Templates/DFY CRUD + seed job trigger/status

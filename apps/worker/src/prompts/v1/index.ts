@@ -9,7 +9,7 @@
  */
 import type { BookOutline, BookMetadata, Bible, LengthPreset } from '@booksaga/shared';
 
-export const PROMPT_VERSION = 'v1';
+export const PROMPT_VERSION = 'v1.1';
 
 export interface PromptMessage {
   role: 'user' | 'assistant';
@@ -186,7 +186,7 @@ TASK: write one chapter of a novel. Output prose only — no title, no notes, no
           `Series: ${input.seriesTitle} · Part ${input.partNumber} · Chapter ${input.chapterNumber}`,
           `Chapter title: ${input.chapterTitle}`,
           `POV: ${input.pov} · Tense: ${input.tense}`,
-          `Target length: ~${input.targetWords} words. Do not stop early; a chapter under ${Math.round(input.targetWords * 0.85)} words is a failure.`,
+          `Target length: ~${input.targetWords} words. Hard limits: at least ${Math.round(input.targetWords * 0.85)} and at most ${Math.round(input.targetWords * 1.2)} words. Cover every beat, then stop on the closing hook; do not pad or run past the upper limit.`,
           `Beats to hit:\n${input.beats.map((b) => `- ${b}`).join('\n')}`,
           '',
           `Book outline (for context only):\n${JSON.stringify(input.outline)}`,

@@ -60,8 +60,11 @@ test.describe('dashboard, search, notifications, profile', () => {
 
     // Dashboard stats.
     await page.goto('/dashboard');
-    await expect(page.getByRole('link', { name: title })).toBeVisible();
-    await expect(page.getByText('12,000 words', { exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible();
+    await expect(page.getByText('12,000 words written', { exact: true })).toBeVisible();
+    // The new stat row and the recent-series progress.
+    await expect(page.getByText('Total Series', { exact: true })).toBeVisible();
+    await expect(page.getByText('Part 1 completed')).toBeVisible();
 
     // ⌘K palette finds the series and navigates to it.
     await page.keyboard.press('Control+k');

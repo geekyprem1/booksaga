@@ -28,7 +28,7 @@ export function MobileNav({
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/60 data-[state=open]:animate-in data-[state=open]:fade-in-0" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col gap-6 border-r border-border bg-background p-4 data-[state=open]:animate-in data-[state=open]:slide-in-from-left"
+          className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col gap-6 overflow-y-auto border-r border-border bg-background p-4 data-[state=open]:animate-in data-[state=open]:slide-in-from-left"
         >
           <Dialog.Title className="sr-only">Navigation</Dialog.Title>
           <div className="flex items-center justify-between">

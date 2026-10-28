@@ -294,12 +294,21 @@ export async function processBook(
   };
 
   let extractInFlight: Promise<void> | null = null;
+  /**
+   * A rejected extraction must not crash the worker while the next chapter is still being written
+   * (an unhandled rejection kills the process). The no-op catch marks it handled; the error still
+   * surfaces when the loop awaits extractInFlight.
+   */
+  const track = (promise: Promise<void>): Promise<void> => {
+    promise.catch(() => undefined);
+    return promise;
+  };
 
   for (const chapter of all) {
     // Resumability: a chapter written before a crash has prose but no summary/facts yet.
     if (chapter.status === 'done' && !chapter.summary) {
       if (extractInFlight) await extractInFlight;
-      extractInFlight = extractFacts(chapter, chapter.content_text ?? '');
+      extractInFlight = track(extractFacts(chapter, chapter.content_text ?? ''));
       continue;
     }
     if (chapter.status === 'done') continue;
@@ -392,7 +401,7 @@ export async function processBook(
 
     // The previous extraction ran during this write, so this await is normally instant.
     if (extractInFlight) await extractInFlight;
-    extractInFlight = extractFacts(chapter, text);
+    extractInFlight = track(extractFacts(chapter, text));
 
     await runner.progress(
       CHAPTER_BASE + (CHAPTER_SPAN * chapter.number) / Math.max(total, 1),
@@ -608,10 +617,12 @@ export function replaceParagraph(
         .includes(target),
   );
   if (index === -1) return null;
+  // A rewrite may return several paragraphs; keep all of them instead of dropping everything after
+  // the first one (which would silently delete text the model wrote).
+  if (replacement.length === 0) return null;
 
   const next = [...doc.content];
-  const first = replacement[0];
-  if (first) next[index] = first;
+  next.splice(index, 1, ...replacement);
   return { ...doc, content: next };
 }
 

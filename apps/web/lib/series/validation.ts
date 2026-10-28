@@ -85,6 +85,10 @@ export interface CreateSeriesResult {
 
 export interface JobSnapshot {
   id: string;
+  type: string;
+  createdAt: string;
+  startedAt: string | null;
+  heartbeatAt: string | null;
   status: 'queued' | 'active' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   stepLabel: string | null;

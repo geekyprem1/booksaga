@@ -1,4 +1,8 @@
-import { KdpPreview, type PreflightCheck, type PreviewBook } from '@/components/preview/kdp-preview';
+import {
+  KdpPreview,
+  type PreflightCheck,
+  type PreviewBook,
+} from '@/components/preview/kdp-preview';
 import { chapterHtml } from '@booksaga/exporters/html';
 import { backMatter, frontMatter } from '@booksaga/exporters/matter';
 import { insideMarginFor, TRIM_INCHES, type TrimSize } from '@booksaga/exporters/print';
@@ -40,11 +44,15 @@ export default async function KdpPreviewPage({
 
   if (books.length === 0) {
     return (
-      <Card>
-        <CardContent className="p-12 text-center text-sm text-muted-foreground">
-          Write a book first — the preview needs a generated part.
-        </CardContent>
-      </Card>
+      <KdpPreview
+        books={[]}
+        selectedId={null}
+        pdfUrl={null}
+        downloadUrl={null}
+        checks={[]}
+        ebookHtml=""
+        pageCount={null}
+      />
     );
   }
 
@@ -105,7 +113,7 @@ export default async function KdpPreviewPage({
     authorBio?: string;
   };
 
-  const settings = (series?.settings ?? {}) as { trim?: TrimSize };
+  const settings = (series?.settings ?? {}) as { trim?: TrimSize; bleed?: boolean };
   const trim: TrimSize = settings.trim && settings.trim in TRIM_INCHES ? settings.trim : '6x9';
 
   const chapterList = (chapters ?? []).map((chapter) => ({
@@ -173,12 +181,16 @@ export default async function KdpPreviewPage({
       id: 'metadata',
       label: 'Metadata',
       status:
-        metadataRow.blurb && (metadataRow.keywords?.length ?? 0) > 0 && (metadataRow.categories?.length ?? 0) > 0
+        metadataRow.blurb &&
+        (metadataRow.keywords?.length ?? 0) > 0 &&
+        (metadataRow.categories?.length ?? 0) > 0
           ? 'pass'
           : 'warn',
       detail: [
         metadataRow.blurb ? null : 'blurb missing',
-        (metadataRow.keywords?.length ?? 0) >= 7 ? null : `${metadataRow.keywords?.length ?? 0}/7 keywords`,
+        (metadataRow.keywords?.length ?? 0) >= 7
+          ? null
+          : `${metadataRow.keywords?.length ?? 0}/7 keywords`,
         `${metadataRow.categories?.length ?? 0}/3 categories`,
       ]
         .filter(Boolean)
@@ -211,23 +223,21 @@ export default async function KdpPreviewPage({
   ];
 
   return (
-    <div className="flex flex-col gap-5">
-      <header>
-        <h1 className="text-3xl font-extrabold">KDP Preview</h1>
-        <p className="mt-1 text-muted-foreground">
-          Check the print file and the ebook exactly as a reader (and KDP) will see them.
-        </p>
-      </header>
-
-      <KdpPreview
-        books={books}
-        selectedId={selectedId}
-        pdfUrl={pdfPath ? `/api/files/exports/${pdfPath}?stream=1` : null}
-        downloadUrl={zipPath ? `/api/files/exports/${zipPath}` : null}
-        checks={checks}
-        ebookHtml={ebookHtml}
-        pageCount={pageCount}
-      />
-    </div>
+    <KdpPreview
+      books={books}
+      selectedId={selectedId}
+      pdfUrl={pdfPath ? `/api/files/exports/${pdfPath}?stream=1` : null}
+      downloadUrl={zipPath ? `/api/files/exports/${zipPath}` : null}
+      checks={checks}
+      ebookHtml={ebookHtml}
+      pageCount={pageCount}
+      coverUrl={cover?.final_path ? `/api/files/covers/${cover.final_path}?stream=1` : null}
+      wrapUrl={files.wrap ? `/api/files/exports/${files.wrap}?stream=1` : null}
+      seriesId={book.series_id}
+      bookTitle={book.title || `Part ${book.part_number}`}
+      author={series?.pen_name || 'Unknown Author'}
+      trimLabel={`${TRIM_INCHES[trim].width} × ${TRIM_INCHES[trim].height} in`}
+      bleed={settings.bleed === true}
+    />
   );
 }

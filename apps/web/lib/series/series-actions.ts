@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { AppError } from '@booksaga/shared';
+import { AppError, assertCan } from '@booksaga/shared';
+import { getAccount } from '@/lib/account';
 import { requireUser } from '@/lib/auth/session';
 import { getAdminDb } from '@/lib/supabase/admin';
 import { runAction, type ActionResult } from '@/lib/actions';
@@ -138,14 +139,25 @@ export async function duplicateSeriesAction(
   return runAction(async () => {
     const user = await requireUser();
     const db = getAdminDb();
+    const { seriesId } = idInput.parse(input);
 
     const { data: series } = await db
       .from('series')
       .select('*')
-      .eq('id', input.seriesId)
+      .eq('id', seriesId)
       .maybeSingle();
     if (!series) throw new AppError('NOT_FOUND', 'Series not found.');
     if (series.user_id !== user.id) throw new AppError('FORBIDDEN', 'This series is not yours.');
+
+    // A duplicate is a new series, so it must respect the same plan cap as "Create Series".
+    const { account } = await getAccount();
+    const { count } = await db
+      .from('series')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .is('deleted_at', null)
+      .neq('status', 'archived');
+    assertCan(account.entitlements, { kind: 'createSeries', activeSeriesCount: count ?? 0 });
 
     const { data: created, error } = await db
       .from('series')
