@@ -3,6 +3,7 @@ import { requireUser } from '@/lib/auth/session';
 import { getAccount } from '@/lib/account';
 import { loadSeries } from '@/lib/series/load';
 import { getAdminDb } from '@/lib/supabase/admin';
+import { exportFilesExpired } from '@/lib/exports/latest';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,21 +43,21 @@ export default async function SeriesExportsPage({ params }: { params: Promise<{ 
     .from('exports')
     .select('id, book_id, formats, files, status, created_at, expires_at')
     .eq('series_id', series.id)
+    .in('status', ['ready', 'expired'])
     .order('created_at', { ascending: false })
     .limit(10);
 
   const titleByBook = new Map((books ?? []).map((book) => [book.id, book.title]));
 
-  const rows: ExportRow[] = (exportRows ?? [])
-    .filter((row) => row.status === 'ready')
-    .map((row) => ({
-      id: row.id,
-      bookTitle: titleByBook.get(row.book_id ?? '') ?? 'Book',
-      formats: row.formats ?? [],
-      zipPath: ((row.files ?? {}) as { zip?: string }).zip ?? null,
-      createdAt: row.created_at,
-      expiresAt: row.expires_at,
-    }));
+  const rows: ExportRow[] = (exportRows ?? []).map((row) => ({
+    id: row.id,
+    bookTitle: titleByBook.get(row.book_id ?? '') ?? 'Book',
+    formats: row.formats ?? [],
+    zipPath: ((row.files ?? {}) as { zip?: string }).zip ?? null,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+    status: exportFilesExpired(row.status, row.expires_at) ? 'expired' : 'ready',
+  }));
 
   const exportBooks: ExportBook[] = (books ?? []).map((book) => ({
     id: book.id,
@@ -69,10 +70,6 @@ export default async function SeriesExportsPage({ params }: { params: Promise<{ 
   const { account } = await getAccount();
 
   return (
-    <ExportsHub
-      books={exportBooks}
-      exports={rows}
-      canWrap={account.entitlements.paperbackWrap}
-    />
+    <ExportsHub books={exportBooks} exports={rows} canWrap={account.entitlements.paperbackWrap} />
   );
 }

@@ -1,0 +1,17 @@
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/coverage
+**/test-results
+**/playwright-report
+**/*.log
+**/*.tsbuildinfo
+.git
+.commandcode
+.env
+.env.*
+!.env.example
+supabase/.temp
+supabase/.branches
+audit-report.json

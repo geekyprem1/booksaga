@@ -13,6 +13,7 @@ import {
   refundCredits,
   queueForJob,
   type DbClient,
+  type Database,
   type JobType,
   type Queues,
 } from '@booksaga/core';
@@ -30,6 +31,9 @@ interface JobLike {
   ledger_id: number | null;
   idempotency_key: string;
   meta: unknown;
+  cancel_requested: boolean;
+  started_at: string | null;
+  heartbeat_at: string | null;
 }
 
 function reapedCount(meta: unknown): number {
@@ -45,67 +49,102 @@ export interface ReaperSummary {
   failed: number;
 }
 
+/** BullMQ can still be running or waiting to retry a job even if the DB heartbeat is stale. */
+export async function hasLiveQueueJob(queues: Queues, job: JobLike): Promise<boolean> {
+  const queue = queues[queueForJob(job.type as JobType)];
+  for (const id of [
+    job.idempotency_key,
+    `${job.idempotency_key}-r1`,
+    `${job.idempotency_key}-r2`,
+  ]) {
+    const entry = await queue.getJob(id);
+    if (!entry) continue;
+    const state = await entry.getState();
+    if (state !== 'completed' && state !== 'failed') return true;
+  }
+  return false;
+}
+
 export async function runStuckReaper(db: DbClient, queues: Queues): Promise<ReaperSummary> {
   const now = Date.now();
   const summary: ReaperSummary = { requeued: 0, failed: 0 };
 
   const { data: stale, error: staleError } = await db
     .from('jobs')
-    .select('id, user_id, type, ref_id, status, ledger_id, idempotency_key, meta')
+    .select(
+      'id, user_id, type, ref_id, status, ledger_id, idempotency_key, meta, cancel_requested, started_at, heartbeat_at',
+    )
     .eq('status', 'active')
     .lt('heartbeat_at', new Date(now - STALE_HEARTBEAT_MS).toISOString());
   if (staleError) throw new Error(`Reaper could not read active jobs: ${staleError.message}`);
 
   for (const job of stale ?? []) {
+    if (await hasLiveQueueJob(queues, job as JobLike)) continue;
     const outcome = await handleStuck(db, queues, job as JobLike, 'stale heartbeat');
-    summary[outcome] += 1;
+    if (outcome !== 'skipped') summary[outcome] += 1;
   }
 
   const { data: queued, error: queuedError } = await db
     .from('jobs')
-    .select('id, user_id, type, ref_id, status, ledger_id, idempotency_key, meta')
+    .select(
+      'id, user_id, type, ref_id, status, ledger_id, idempotency_key, meta, cancel_requested, started_at, heartbeat_at',
+    )
     .eq('status', 'queued')
     .lt('queued_at', new Date(now - ORPHAN_QUEUED_MS).toISOString());
   if (queuedError) throw new Error(`Reaper could not read queued jobs: ${queuedError.message}`);
 
   for (const job of queued ?? []) {
     const row = job as JobLike;
-    const queue = queues[queueForJob(row.type as JobType)];
+    if (await hasLiveQueueJob(queues, row)) continue;
 
-    // Is there still a BullMQ job for this row (original id or a re-queue suffix)?
-    const candidates = [
-      row.idempotency_key,
-      `${row.idempotency_key}-r1`,
-      `${row.idempotency_key}-r2`,
-    ];
-    let exists = false;
-    for (const id of candidates) {
-      const bullJob = await queue.getJob(id);
-      if (bullJob) {
-        exists = true;
-        break;
+    if (row.cancel_requested && !row.started_at) {
+      try {
+        if (row.ledger_id) {
+          const result = await refundCredits(db, row.ledger_id, 'Cancelled before start');
+          if (result !== 'refunded' && result !== 'already_refunded')
+            throw new Error(`Refund status: ${result}`);
+        }
+        const { data: cancelled, error } = await db
+          .from('jobs')
+          .update({
+            status: 'cancelled',
+            step_label: 'Cancelled',
+            finished_at: new Date().toISOString(),
+            heartbeat_at: null,
+          })
+          .eq('id', row.id)
+          .eq('status', 'queued')
+          .select('id')
+          .maybeSingle();
+        if (error) throw error;
+        if (cancelled && row.type === 'book' && row.ref_id) {
+          await db.from('books').update({ status: 'ready' }).eq('id', row.ref_id);
+        }
+      } catch (err) {
+        console.error(`[reaper] cancellation settlement failed for ${row.id}:`, err);
       }
+      continue;
     }
-    if (exists) continue;
 
     const outcome = await handleStuck(db, queues, row, 'orphaned queued job');
-    summary[outcome] += 1;
+    if (outcome !== 'skipped') summary[outcome] += 1;
   }
 
   return summary;
 }
 
-async function handleStuck(
+export async function handleStuck(
   db: DbClient,
   queues: Queues,
   job: JobLike,
   reason: string,
-): Promise<'requeued' | 'failed'> {
+): Promise<'requeued' | 'failed' | 'skipped'> {
   const reaped = reapedCount(job.meta);
 
   if (reaped >= MAX_REQUEUES) {
-    await failJob(db, job, `Gave up after ${MAX_REQUEUES} re-queues (${reason}).`);
-    return 'failed';
+    return (await failJob(db, job, `Gave up after ${MAX_REQUEUES} re-queues (${reason}).`))
+      ? 'failed'
+      : 'skipped';
   }
 
   const queue = queues[queueForJob(job.type as JobType)];
@@ -117,6 +156,25 @@ async function handleStuck(
     job.meta && typeof job.meta === 'object' && !Array.isArray(job.meta)
       ? (job.meta as Record<string, unknown>)
       : {};
+
+  // Claim the observed row before exposing the new BullMQ job. A worker may start immediately
+  // after queue.add; updating the status afterwards would overwrite its active/finished state.
+  let claim = db
+    .from('jobs')
+    .update({
+      status: 'queued',
+      step_label: `Re-queued after ${reason}`,
+      heartbeat_at: null,
+      execution_token: null,
+      meta: { ...payload, reaped: attempt },
+    })
+    .eq('id', job.id)
+    .eq('status', job.status)
+    .eq('cancel_requested', job.cancel_requested);
+  if (job.heartbeat_at) claim = claim.eq('heartbeat_at', job.heartbeat_at);
+  const { data: claimed, error: claimError } = await claim.select('id').maybeSingle();
+  if (claimError) throw new Error(`Could not claim job for recovery: ${claimError.message}`);
+  if (!claimed) return 'skipped';
 
   try {
     await queue.add(
@@ -132,38 +190,51 @@ async function handleStuck(
     );
   } catch (err) {
     console.error(`[reaper] could not re-queue ${job.id}:`, err);
+    await db
+      .from('jobs')
+      .update({ meta: payload as Database['public']['Tables']['jobs']['Update']['meta'] })
+      .eq('id', job.id)
+      .eq('status', 'queued')
+      .contains('meta', { reaped: attempt });
     return 'requeued'; // leave it for the next pass rather than failing the user's job
   }
-
-  await db
-    .from('jobs')
-    .update({
-      status: 'queued',
-      progress: 0,
-      step_label: `Re-queued after ${reason}`,
-      heartbeat_at: null,
-      meta: { ...(job.meta as Record<string, unknown>), reaped: attempt },
-    })
-    .eq('id', job.id);
 
   return 'requeued';
 }
 
-async function failJob(db: DbClient, job: JobLike, message: string): Promise<void> {
-  if (job.ledger_id) {
-    await refundCredits(db, job.ledger_id, 'Job abandoned').catch((err) =>
-      console.error('[reaper] refund failed', err),
-    );
-  }
-  await db
+async function failJob(db: DbClient, job: JobLike, message: string): Promise<boolean> {
+  let claim = db
     .from('jobs')
     .update({
       status: 'failed',
+      execution_token: null,
       error: message,
       finished_at: new Date().toISOString(),
       heartbeat_at: null,
     })
-    .eq('id', job.id);
+    .eq('id', job.id)
+    .eq('status', job.status)
+    .eq('cancel_requested', job.cancel_requested);
+  if (job.heartbeat_at) claim = claim.eq('heartbeat_at', job.heartbeat_at);
+  const { data: claimed, error } = await claim.select('id').maybeSingle();
+  if (error) throw new Error(`Could not fail abandoned job: ${error.message}`);
+  if (!claimed) return false;
+  if (job.ledger_id) {
+    try {
+      const result = await refundCredits(db, job.ledger_id, 'Job abandoned');
+      if (result !== 'refunded' && result !== 'already_refunded') {
+        throw new Error(`Could not confirm abandoned job refund: ${result}`);
+      }
+    } catch (err) {
+      await db
+        .from('jobs')
+        .update({ error: `${message} Credit refund could not be confirmed; contact support.` })
+        .eq('id', job.id);
+      throw err;
+    }
+  }
+  if (job.type === 'book' && job.ref_id)
+    await db.from('books').update({ status: 'failed' }).eq('id', job.ref_id);
 
   await db.from('notifications').insert({
     user_id: job.user_id,
@@ -171,4 +242,5 @@ async function failJob(db: DbClient, job: JobLike, message: string): Promise<voi
     title: 'Generation failed',
     body: `${message} Your credits have been refunded.`,
   });
+  return true;
 }

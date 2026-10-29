@@ -41,7 +41,9 @@ test.describe('admin: users', () => {
     expect(profile).toBeTruthy();
 
     // The new buyer can sign in with the generated password and sees 3,300 credits (300 + 3,000).
-    const ctx = await browser.newContext({ baseURL: 'http://localhost:3000' });
+    const ctx = await browser.newContext({
+      baseURL: process.env.APP_URL ?? 'http://localhost:3000',
+    });
     const buyer = await ctx.newPage();
     await login(buyer, { email, password });
     await expect(buyer).toHaveURL(/\/dashboard$/);
@@ -116,7 +118,9 @@ test.describe('admin: users', () => {
     const admin = await createAccount({ role: 'admin', plans: ['fe'] });
     const target = await createAccount({ plans: ['fe'] });
 
-    const ctx = await browser.newContext({ baseURL: 'http://localhost:3000' });
+    const ctx = await browser.newContext({
+      baseURL: process.env.APP_URL ?? 'http://localhost:3000',
+    });
     const victim = await ctx.newPage();
     await login(victim, target);
     await expect(victim).toHaveURL(/\/dashboard$/);

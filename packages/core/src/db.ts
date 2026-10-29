@@ -8,8 +8,13 @@ export type { Database };
  * Service-role client. Bypasses RLS: only ever create it on the server / worker, never ship the
  * key to the browser.
  */
-export function createAdminClient(url: string, serviceRoleKey: string): DbClient {
+export function createAdminClient(
+  url: string,
+  serviceRoleKey: string,
+  options: { headers?: Record<string, string>; fetch?: typeof fetch } = {},
+): DbClient {
   return createClient<Database>(url, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: options,
   });
 }

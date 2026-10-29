@@ -31,7 +31,9 @@ export default async function AdminJobPage({ params }: { params: Promise<{ id: s
   const [{ data: usage }, { data: ledger }] = await Promise.all([
     db
       .from('ai_usage_log')
-      .select('id, provider, model, purpose, input_tokens, output_tokens, images, cost_usd, created_at')
+      .select(
+        'id, provider, model, purpose, input_tokens, output_tokens, images, cost_usd, created_at',
+      )
       .eq('job_id', job.id)
       .order('created_at', { ascending: true })
       .limit(200),
@@ -41,12 +43,27 @@ export default async function AdminJobPage({ params }: { params: Promise<{ id: s
   ]);
 
   const cost = (usage ?? []).reduce((sum, row) => sum + Number(row.cost_usd || 0), 0);
-  const running = job.status === 'queued' || job.status === 'active';
+  const running = job.status === 'queued' || (job.status === 'active' && job.type === 'book');
 
   const facts: [string, React.ReactNode][] = [
-    ['User', <Link key="u" className="hover:underline" href={`/admin/users/${job.user_id}`}>{job.profiles?.email ?? job.user_id}</Link>],
-    ['Type', <span key="t" className="font-mono">{job.type}</span>],
-    ['Target', <span key="r" className="font-mono">{job.ref_id ?? '—'}</span>],
+    [
+      'User',
+      <Link key="u" className="hover:underline" href={`/admin/users/${job.user_id}`}>
+        {job.profiles?.email ?? job.user_id}
+      </Link>,
+    ],
+    [
+      'Type',
+      <span key="t" className="font-mono">
+        {job.type}
+      </span>,
+    ],
+    [
+      'Target',
+      <span key="r" className="font-mono">
+        {job.ref_id ?? '—'}
+      </span>,
+    ],
     ['Progress', `${job.progress}%${job.step_label ? ` · ${job.step_label}` : ''}`],
     ['Attempts', String(job.attempts)],
     ['Credits reserved', String(job.credits_reserved)],
@@ -149,7 +166,9 @@ export default async function AdminJobPage({ params }: { params: Promise<{ id: s
                   <td className="py-1.5 pr-3">{row.purpose ?? '—'}</td>
                   <td className="py-1.5 pr-3 font-mono text-xs">{row.model}</td>
                   <td className="py-1.5 pr-3">{row.input_tokens || '—'}</td>
-                  <td className="py-1.5 pr-3">{row.output_tokens || (row.images ? `${row.images} img` : '—')}</td>
+                  <td className="py-1.5 pr-3">
+                    {row.output_tokens || (row.images ? `${row.images} img` : '—')}
+                  </td>
                   <td className="py-1.5">${Number(row.cost_usd).toFixed(4)}</td>
                 </tr>
               ))}

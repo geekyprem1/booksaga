@@ -4,7 +4,7 @@
  * {{NEXT_BOOK_URL}} placeholder KDP authors replace), About the Author and the series list.
  */
 import type { BookMetadata } from '@booksaga/shared';
-import { escapeHtml } from '../html/render';
+import { displayTitle, escapeHtml } from '../html/render';
 
 export interface MatterInput {
   seriesTitle: string;
@@ -67,7 +67,7 @@ export function tableOfContents(chapters: { number: number; title: string }[]): 
   const items = chapters
     .map(
       (chapter) =>
-        `<li><a href="#ch-${chapter.number}"><span class="toc-num">${String(chapter.number).padStart(2, '0')}</span> ${escapeHtml(chapter.title)}</a></li>`,
+        `<li><a href="#ch-${chapter.number}"><span class="toc-num">${String(chapter.number).padStart(2, '0')}</span> ${escapeHtml(displayTitle(chapter.title))}</a></li>`,
     )
     .join('\n');
   return `<nav class="toc" id="toc">
@@ -91,7 +91,8 @@ export function endOfBookPage(input: MatterInput): string {
 }
 
 export function readNextPage(input: MatterInput, nextTitle?: string | null): string {
-  const next = input.metadata?.readNext?.trim() || 'The story continues in the next part of the series.';
+  const next =
+    input.metadata?.readNext?.trim() || 'The story continues in the next part of the series.';
   return `<section class="back-matter read-next">
   <h2>Read Next</h2>
   ${nextTitle ? `<p class="next-title">${escapeHtml(nextTitle)}</p>` : ''}
@@ -119,11 +120,7 @@ export function alsoInSeriesPage(input: MatterInput, titles: string[]): string {
 
 /** All front matter, in reading order. */
 export function frontMatter(input: MatterInput): string {
-  return [
-    titlePage(input),
-    copyrightPage(input),
-    tableOfContents(input.chapters),
-  ].join('\n');
+  return [titlePage(input), copyrightPage(input), tableOfContents(input.chapters)].join('\n');
 }
 
 /** All back matter, in reading order. */

@@ -1,5 +1,7 @@
 'use client';
 
+import { getDfyGenre } from '@booksaga/shared';
+
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -113,7 +115,12 @@ export function DfyLibrary({
                 </CardHeader>
                 <CardContent className="flex flex-col gap-2">
                   <p className="text-xs text-muted-foreground">{pack.description}</p>
-                  <Button type="button" size="sm" variant="secondary" onClick={() => setOpenPack(pack)}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setOpenPack(pack)}
+                  >
                     {locked ? <Lock aria-hidden="true" /> : <Copy aria-hidden="true" />} Open pack
                   </Button>
                 </CardContent>
@@ -123,12 +130,21 @@ export function DfyLibrary({
         </div>
       </section>
 
-      <Dialog open={Boolean(openIdea)} onOpenChange={(value) => (!value ? setOpenIdea(null) : undefined)}>
-        <DialogContent title={openIdea?.title ?? ''} description={openIdea?.niche} className="max-w-lg">
+      <Dialog
+        open={Boolean(openIdea)}
+        onOpenChange={(value) => (!value ? setOpenIdea(null) : undefined)}
+      >
+        <DialogContent
+          title={openIdea?.title ?? ''}
+          description={openIdea?.niche}
+          className="max-w-lg"
+        >
           {openIdea ? (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-muted-foreground">{openIdea.premise}</p>
-              {openIdea.hook ? <p className="text-xs text-muted-foreground">{openIdea.hook}</p> : null}
+              {openIdea.hook ? (
+                <p className="text-xs text-muted-foreground">{openIdea.hook}</p>
+              ) : null}
               {openIdea.tier === 'full' && !fullAccess ? (
                 <Button asChild size="sm">
                   <Link href="/upgrade/oto2">Unlock the full DFY library</Link>
@@ -138,7 +154,7 @@ export function DfyLibrary({
                   type="button"
                   onClick={() =>
                     router.push(
-                      `/create-series?idea=${encodeURIComponent(openIdea.premise)}&genre=${encodeURIComponent(openIdea.niche)}`,
+                      `/create-series?idea=${encodeURIComponent(openIdea.premise)}&genre=${encodeURIComponent(getDfyGenre(openIdea.niche)?.id ?? '')}`,
                     )
                   }
                 >
@@ -150,8 +166,15 @@ export function DfyLibrary({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(openPack)} onOpenChange={(value) => (!value ? setOpenPack(null) : undefined)}>
-        <DialogContent title={openPack?.title ?? ''} description={openPack?.genre} className="max-w-lg">
+      <Dialog
+        open={Boolean(openPack)}
+        onOpenChange={(value) => (!value ? setOpenPack(null) : undefined)}
+      >
+        <DialogContent
+          title={openPack?.title ?? ''}
+          description={openPack?.genre}
+          className="max-w-lg"
+        >
           {openPack ? (
             <div className="flex flex-col gap-3 text-sm">
               <div>
@@ -163,7 +186,9 @@ export function DfyLibrary({
                 <p className="text-xs">{(openPack.contents.categories ?? []).join(' · ')}</p>
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase text-muted-foreground">Blurb openers</p>
+                <p className="text-xs font-semibold uppercase text-muted-foreground">
+                  Blurb openers
+                </p>
                 <ul className="list-disc pl-4 text-xs">
                   {(openPack.contents.blurbs ?? []).map((blurb) => (
                     <li key={blurb}>{blurb}</li>

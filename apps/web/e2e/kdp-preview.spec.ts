@@ -103,6 +103,54 @@ test('selected book renders its manuscript and PDF across tabs, zoom and page ch
     .select('id')
     .single();
   expect(bookError).toBeNull();
+  // More than 50 newer books from another buyer must not crowd this book out of the selector.
+  const otherUser = await createAccount({ plans: ['fe'] });
+  const otherSeries = await service
+    .from('series')
+    .insert(
+      [1, 2].map((number) => ({
+        user_id: otherUser.id,
+        title: `Other buyer series ${number}`,
+        idea: 'Another story.',
+        genre: 'Fantasy',
+        pen_name: 'Other Author',
+      })),
+    )
+    .select('id');
+  expect(otherSeries.error).toBeNull();
+  const foreignBooks = await service.from('books').insert(
+    Array.from({ length: 51 }, (_, i) => ({
+      series_id: otherSeries.data![Math.floor(i / 26)]!.id,
+      part_number: (i % 26) + 1,
+      title: `Other book ${i + 1}`,
+      premise: 'Other story.',
+      status: 'generated',
+      length_preset: 'short',
+    })),
+  );
+  expect(foreignBooks.error).toBeNull();
+  const deletedSeries = await service
+    .from('series')
+    .insert({
+      user_id: user.id,
+      title: 'Deleted series',
+      idea: 'A deleted story.',
+      genre: 'Fantasy',
+      pen_name: 'Preview Author',
+      deleted_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single();
+  expect(deletedSeries.error).toBeNull();
+  const deletedBook = await service.from('books').insert({
+    series_id: deletedSeries.data!.id,
+    part_number: 1,
+    title: 'Deleted book',
+    premise: 'Deleted.',
+    status: 'generated',
+    length_preset: 'short',
+  });
+  expect(deletedBook.error).toBeNull();
   const chapter = await service.from('chapters').insert({
     book_id: book!.id,
     number: 1,
@@ -125,9 +173,45 @@ test('selected book renders its manuscript and PDF across tabs, zoom and page ch
     series_id: series!.id,
     status: 'ready',
     formats: ['pdf'],
-    files: { pdf: `${user.id}/${book!.id}/preview.pdf`, pdfPages: '2' },
+    files: {
+      pdf: `${user.id}/${book!.id}/old.pdf`,
+      pdfPages: '1',
+      wrap: `${user.id}/${book!.id}/wrap.pdf`,
+      wrapPages: '1',
+    },
+    created_at: new Date(Date.now() - 4000).toISOString(),
   });
   expect(exported.error).toBeNull();
+  const newerExports = await service.from('exports').insert([
+    {
+      user_id: user.id,
+      book_id: book!.id,
+      series_id: series!.id,
+      status: 'ready',
+      formats: ['pdf'],
+      files: { pdf: `${user.id}/${book!.id}/preview.pdf`, pdfPages: '2' },
+      created_at: new Date(Date.now() - 3000).toISOString(),
+    },
+    {
+      user_id: user.id,
+      book_id: book!.id,
+      series_id: series!.id,
+      status: 'ready',
+      formats: ['reader'],
+      files: { reader: `${user.id}/${book!.id}/reader.pdf` },
+      created_at: new Date(Date.now() - 2000).toISOString(),
+    },
+    {
+      user_id: user.id,
+      book_id: book!.id,
+      series_id: series!.id,
+      status: 'expired',
+      formats: ['pdf'],
+      files: { pdf: `${user.id}/${book!.id}/expired.pdf`, pdfPages: '999' },
+      created_at: new Date(Date.now() - 1000).toISOString(),
+    },
+  ]);
+  expect(newerExports.error).toBeNull();
   await page.route('**/api/files/exports/**/preview.pdf?stream=1', (route) =>
     route.fulfill({
       contentType: 'application/pdf',
@@ -136,6 +220,17 @@ test('selected book renders its manuscript and PDF across tabs, zoom and page ch
   );
   await login(page, user);
   await page.goto(`/kdp-preview?book=${book!.id}`);
+  await expect(page.getByLabel('Choose a book').locator('option')).toHaveCount(1);
+  const ebook = page.frameLocator('iframe[title="Kindle ebook manuscript"]');
+  await expect(ebook.getByText('The End', { exact: true })).toBeVisible();
+  await expect(ebook.getByText('A Fantasy', { exact: true })).toBeVisible();
+  await expect(ebook.getByText(/Continued in/)).toHaveCount(0);
+  await expect(page.locator('details').filter({ hasText: 'Read Next link' })).toContainText(
+    'Replace {{NEXT_BOOK_URL}}',
+  );
+  await expect(page.locator('details').filter({ hasText: 'Paperback wrap' })).toContainText(
+    'Wrap was built for 1 pages but the book is now 2',
+  );
   await expect(
     page
       .frameLocator('iframe[title="Kindle ebook manuscript"]')
@@ -160,4 +255,7 @@ test('selected book renders its manuscript and PDF across tabs, zoom and page ch
     page.getByRole('dialog').getByText('2 pages — KDP requires at least 24.'),
   ).toBeVisible();
   expect(errors).toEqual([]);
+  await page.keyboard.press('Escape');
+  await page.goto(`/series/${series!.id}/exports`);
+  await expect(page.getByText('Files expired · export again for free')).toBeVisible();
 });

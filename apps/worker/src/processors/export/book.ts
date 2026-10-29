@@ -27,6 +27,7 @@ import {
 } from '@booksaga/exporters';
 import type { JobRunner } from '../../lib/jobs';
 import { renderPdf } from '../../lib/pdf';
+import { assertWorkerAccess } from '../../lib/entitlements';
 
 export type ExportFormat = 'epub' | 'pdf' | 'reader' | 'docx' | 'metadata' | 'wrap';
 
@@ -46,7 +47,9 @@ export async function processBookExport(
   data: BookExportJobData,
 ): Promise<void> {
   const { db } = deps;
-  const formats = data.formats?.length ? data.formats : (['epub', 'pdf', 'docx', 'metadata'] as ExportFormat[]);
+  const formats = data.formats?.length
+    ? data.formats
+    : (['epub', 'pdf', 'docx', 'metadata'] as ExportFormat[]);
   let pdfPages: number | null = null;
 
   const { data: book } = await db.from('books').select('*').eq('id', data.refId).maybeSingle();
@@ -58,7 +61,10 @@ export async function processBookExport(
     .eq('id', book.series_id)
     .maybeSingle();
   if (!series) throw new Error(`Series ${book.series_id} not found`);
-  if (series.user_id !== data.userId) throw new Error('This book does not belong to the job owner.');
+  if (series.user_id !== data.userId)
+    throw new Error('This book does not belong to the job owner.');
+  if (formats.includes('wrap'))
+    await assertWorkerAccess(db, data.userId, { kind: 'paperbackWrap' });
 
   await runner.progress(10, 'Collecting the manuscript');
 
@@ -88,7 +94,10 @@ export async function processBookExport(
     .order('part_number');
   const allBooks = seriesBooks ?? [];
   const nextBook = allBooks.find((other) => other.part_number === book.part_number + 1);
-  const lastPart = Math.max(series.planned_books ?? 1, ...allBooks.map((other) => other.part_number));
+  const lastPart = Math.max(
+    series.planned_books ?? 1,
+    ...allBooks.map((other) => other.part_number),
+  );
   const genre = getGenre(series.genre);
   const genreLine = genre
     ? genre.isFiction
@@ -100,7 +109,10 @@ export async function processBookExport(
 
   const matter: MatterInput = {
     genreLine,
-    readingOrder: allBooks.map((other) => ({ partNumber: other.part_number, title: other.title || null })),
+    readingOrder: allBooks.map((other) => ({
+      partNumber: other.part_number,
+      title: other.title || null,
+    })),
     isFinalPart: book.part_number >= lastPart,
     nextTitle: nextBook?.title || null,
     seriesTitle: series.title,
@@ -169,11 +181,12 @@ export async function processBookExport(
     }
   }
 
-  const slug = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60) || 'book';
+  const slug =
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'book';
 
   if (formats.includes('epub')) {
     await runner.progress(35, 'Building the EPUB');
@@ -241,9 +254,7 @@ export async function processBookExport(
 
   if (formats.includes('reader')) {
     await runner.progress(60, 'Typesetting the reader PDF');
-    const art = printArt
-      ? { buffer: printArt.buffer, mime: 'image/jpeg' }
-      : cover;
+    const art = printArt ? { buffer: printArt.buffer, mime: 'image/jpeg' } : cover;
     if (!art) throw new Error('This book has no cover yet — generate a cover first.');
 
     const trim: TrimSize =
@@ -365,7 +376,7 @@ export async function processBookExport(
 
   const expiresAt = new Date(Date.now() + EXPIRY_DAYS * 24 * 3600 * 1000).toISOString();
 
-  await db.from('exports').insert({
+  const { error: historyError } = await db.from('exports').insert({
     id: exportId,
     user_id: data.userId,
     book_id: book.id,
@@ -375,6 +386,9 @@ export async function processBookExport(
     status: 'ready',
     expires_at: expiresAt,
   });
+  if (historyError) {
+    throw new Error(`Could not save the export history: ${historyError.message}`);
+  }
 
   await runner.progress(98, 'Done');
   await runner.complete({

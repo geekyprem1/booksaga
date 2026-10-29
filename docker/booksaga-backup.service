@@ -1,0 +1,15 @@
+[Unit]
+Description=BookSaga database backup and offsite copy
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=booksaga
+Group=booksaga
+WorkingDirectory=/opt/booksaga
+EnvironmentFile=/opt/booksaga/.env.production
+ExecStart=/bin/bash /opt/booksaga/scripts/backup.sh
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true

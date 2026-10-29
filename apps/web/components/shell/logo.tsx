@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
-export function LogoMark({ className }: { className?: string }) {
+export function LogoMark({ className, logoUrl }: { className?: string; logoUrl?: string }) {
+  if (logoUrl)
+    return <img src={logoUrl} alt="" className={cn('size-8 object-contain', className)} />;
   return (
     <svg viewBox="0 0 32 32" className={cn('size-8', className)} aria-hidden="true">
       <defs>
@@ -21,10 +23,18 @@ export function LogoMark({ className }: { className?: string }) {
   );
 }
 
-export function Logo({ name = 'BookSaga', href = '/dashboard' }: { name?: string; href?: string }) {
+export function Logo({
+  name = 'BookSaga',
+  href = '/dashboard',
+  logoUrl,
+}: {
+  name?: string;
+  href?: string;
+  logoUrl?: string;
+}) {
   return (
     <Link href={href} className="flex items-center gap-2.5 rounded-lg" aria-label={`${name} home`}>
-      <LogoMark />
+      <LogoMark logoUrl={logoUrl} />
       <span className="text-lg font-extrabold tracking-tight">
         <span className="text-brand-gradient">{name}</span>
       </span>

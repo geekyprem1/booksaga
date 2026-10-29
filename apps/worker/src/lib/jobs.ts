@@ -1,20 +1,17 @@
-/**
- * Job lifecycle (T2.7): every processor runs inside a `JobRunner`.
- *
- *   start()  -> status=active, started_at, heartbeat every 15s
- *   progress -> progress %, step_label, meta (read by the UI over Realtime)
- *   complete -> commit_credits + status=completed + notification
- *   fail     -> refund_credits + status=failed + notification
- *   cancel   -> status=cancelled, refund only when the caller says so (PRD §4.2)
- *
- * A killed worker leaves an `active` row with a stale `heartbeat_at`; the stuck reaper picks it up.
- */
-import { commitCredits, refundCredits, type DbClient, type Database } from '@booksaga/core';
+/** Job lifecycle and per-execution database fencing shared by every processor. */
+import { randomUUID } from 'node:crypto';
+import { createAdminClient, type DbClient, type Database } from '@booksaga/core';
 
 export type JobRow = Database['public']['Tables']['jobs']['Row'];
-export type JobMeta = Database['public']['Tables']['jobs']['Row']['meta'];
-
+export type JobMeta = JobRow['meta'];
 const HEARTBEAT_MS = 15_000;
+
+export class JobLeaseLostError extends Error {
+  constructor() {
+    super('JOB_LEASE_LOST');
+    this.name = 'JobLeaseLostError';
+  }
+}
 
 export interface NotificationInput {
   title: string;
@@ -23,62 +20,118 @@ export interface NotificationInput {
   type?: string;
 }
 
+interface JobScope {
+  url: string;
+  key: string;
+  /** Compare Redis's lock with this BullMQ execution's token; errors fail closed. */
+  ownsLock?: () => Promise<boolean>;
+}
+
 export class JobRunner {
-  readonly job: JobRow;
-  private readonly db: DbClient;
+  readonly executionToken = randomUUID();
+  readonly db: DbClient;
   private timer: NodeJS.Timeout | undefined;
   private stopped = false;
   private done = false;
+  private started = false;
+  private lost = false;
   private meta: JobMeta;
 
-  constructor(db: DbClient, job: JobRow) {
-    this.db = db;
-    this.job = job;
+  constructor(
+    private readonly controlDb: DbClient,
+    readonly job: JobRow,
+    private readonly scope: JobScope,
+  ) {
     this.meta = job.meta ?? {};
+    this.db = createAdminClient(scope.url, scope.key, {
+      headers: { 'x-worker-job': job.id, 'x-worker-token': this.executionToken },
+      fetch: async (input, init) => {
+        await this.assertQueueLock();
+        const response = await fetch(input, init);
+        if (response.status === 409 && (await response.clone().text()).includes('JOB_LEASE_LOST')) {
+          this.lost = true;
+          this.stopHeartbeat();
+          throw new JobLeaseLostError();
+        }
+        return response;
+      },
+    });
   }
 
   get jobId(): string {
     return this.job.id;
   }
-
   get userId(): string {
     return this.job.user_id;
   }
-
   get ledgerId(): number | null {
     return this.job.ledger_id;
   }
-
-  /** True once complete/fail/cancel ran — the wrapper must not finish the job twice. */
   get finished(): boolean {
     return this.done;
   }
+  get leaseLost(): boolean {
+    return this.lost;
+  }
 
-  /** Marks the job active and starts the heartbeat. */
-  async start(attempt = 0): Promise<void> {
-    await this.db
+  async assertQueueLock(): Promise<void> {
+    let ownsLock = !this.lost;
+    try {
+      if (ownsLock && this.scope.ownsLock) ownsLock = await this.scope.ownsLock();
+    } catch {
+      ownsLock = false;
+    }
+    if (!ownsLock) {
+      this.lost = true;
+      this.stopHeartbeat();
+      throw new JobLeaseLostError();
+    }
+  }
+
+  /** CAS the observed execution token: concurrent snapshots cannot both win. */
+  async start(attempt = 0): Promise<boolean> {
+    await this.assertQueueLock();
+    let query = this.controlDb
       .from('jobs')
       .update({
         status: 'active',
+        execution_token: this.executionToken,
         started_at: this.job.started_at ?? new Date().toISOString(),
         heartbeat_at: new Date().toISOString(),
         attempts: attempt,
         error: null,
       })
-      .eq('id', this.job.id);
-
+      .eq('id', this.job.id)
+      .eq('status', this.job.status);
+    query = this.job.execution_token
+      ? query.eq('execution_token', this.job.execution_token)
+      : query.is('execution_token', null);
+    if (this.job.status === 'queued' && !(this.job.type === 'book' && this.job.started_at)) {
+      query = query.eq('cancel_requested', false);
+    }
+    const { data, error } = await query.select('id').maybeSingle();
+    if (error) throw new Error(`Could not start job: ${error.message}`);
+    if (!data) return false;
+    this.started = true;
+    const { error: guardError } = await this.db.rpc('guard_worker_request');
+    if (guardError) throw new Error(`Worker fencing is unavailable: ${guardError.message}`);
     this.timer = setInterval(() => {
-      void this.heartbeat();
+      void this.heartbeat().catch((error) => {
+        this.stopHeartbeat();
+        if (!(error instanceof JobLeaseLostError)) console.error('[jobs] heartbeat failed', error);
+      });
     }, HEARTBEAT_MS);
     this.timer.unref?.();
+    return true;
   }
 
   async heartbeat(): Promise<void> {
     if (this.stopped) return;
-    await this.db
+    const { error } = await this.db
       .from('jobs')
       .update({ heartbeat_at: new Date().toISOString() })
       .eq('id', this.job.id);
+    if (error) throw new Error(`Heartbeat failed: ${error.message}`);
   }
 
   async progress(
@@ -87,7 +140,7 @@ export class JobRunner {
     meta: Record<string, unknown> = {},
   ): Promise<void> {
     this.meta = { ...(this.meta as Record<string, unknown>), ...meta } as JobMeta;
-    await this.db
+    const { error } = await this.db
       .from('jobs')
       .update({
         progress: Math.max(0, Math.min(100, Math.round(percent))),
@@ -96,69 +149,53 @@ export class JobRunner {
         heartbeat_at: new Date().toISOString(),
       })
       .eq('id', this.job.id);
+    if (error) throw new Error(`Could not save progress: ${error.message}`);
   }
 
-  /** Re-reads the row: the UI sets `cancel_requested` from the Cancel button. */
   async isCancelRequested(): Promise<boolean> {
-    const { data } = await this.db
+    const { data, error } = await this.db
       .from('jobs')
       .select('cancel_requested')
       .eq('id', this.job.id)
-      .maybeSingle();
-    return data?.cancel_requested === true;
+      .single();
+    if (error) throw new Error(`Could not read cancellation: ${error.message}`);
+    return data.cancel_requested;
   }
 
   async complete(notification?: NotificationInput): Promise<void> {
-    this.stopHeartbeat();
-    this.done = true;
-    if (this.job.ledger_id) {
-      await commitCredits(this.db, this.job.ledger_id);
-    }
-    await this.db
-      .from('jobs')
-      .update({
-        status: 'completed',
-        progress: 100,
-        finished_at: new Date().toISOString(),
-        heartbeat_at: null,
-        error: null,
-      })
-      .eq('id', this.job.id);
-
-    if (notification) await this.notify(notification);
+    await this.finish('completed', false, undefined, notification);
   }
 
-  /** Final failure: refund the reservation, then mark failed. */
   async fail(message: string, notification?: NotificationInput): Promise<void> {
-    this.stopHeartbeat();
-    this.done = true;
-    if (this.job.ledger_id) {
-      await refundCredits(this.db, this.job.ledger_id, 'Job failed').catch((err) =>
-        console.error('[jobs] refund failed', err),
-      );
-    }
-    await this.db
-      .from('jobs')
-      .update({
-        status: 'failed',
-        finished_at: new Date().toISOString(),
-        heartbeat_at: null,
-        error: message.slice(0, 2000),
-      })
-      .eq('id', this.job.id);
-
-    await this.notify(
-      notification ?? {
-        title: 'Generation failed',
-        body: `${message.slice(0, 300)} Your credits have been refunded.`,
-        type: 'job_failed',
-      },
-    );
+    await this.finish('failed', true, message, notification);
   }
 
-  /** Retryable failure: keep the row active (BullMQ will retry) and record the error. */
+  async cancel(options: { refund: boolean; reason?: string }): Promise<void> {
+    await this.finish('cancelled', options.refund, options.reason ?? 'Cancelled by user');
+  }
+
+  private async finish(
+    status: string,
+    refund: boolean,
+    message?: string,
+    notification?: NotificationInput,
+  ): Promise<void> {
+    if (!this.started || this.done) throw new Error('Job is not running');
+    const { error } = await this.db.rpc('finish_worker_job', {
+      p_job: this.job.id,
+      p_token: this.executionToken,
+      p_status: status,
+      p_refund: refund,
+      p_message: message,
+      p_notification: notification ? { ...notification } : undefined,
+    });
+    if (error) throw new Error(`Could not settle job: ${error.message}`);
+    this.done = true;
+    this.stopHeartbeat();
+  }
+
   async retryLater(message: string, attempt: number): Promise<void> {
-    await this.db
+    const { error } = await this.db
       .from('jobs')
       .update({
         attempts: attempt,
@@ -166,39 +203,7 @@ export class JobRunner {
         heartbeat_at: new Date().toISOString(),
       })
       .eq('id', this.job.id);
-  }
-
-  /**
-   * User cancelled. Refund rule (PRD §4.2): full refund below 20% of the work, otherwise the
-   * completed work is charged. The caller decides which side of the line we are on.
-   */
-  async cancel(options: { refund: boolean; reason?: string }): Promise<void> {
-    this.stopHeartbeat();
-    this.done = true;
-    if (this.job.ledger_id) {
-      if (options.refund) {
-        await refundCredits(this.db, this.job.ledger_id, options.reason ?? 'Cancelled by user');
-      } else {
-        await commitCredits(this.db, this.job.ledger_id);
-      }
-    }
-    await this.db
-      .from('jobs')
-      .update({
-        status: 'cancelled',
-        finished_at: new Date().toISOString(),
-        heartbeat_at: null,
-        step_label: 'Cancelled',
-      })
-      .eq('id', this.job.id);
-
-    await this.notify({
-      title: 'Generation cancelled',
-      body: options.refund
-        ? 'Your credits have been refunded.'
-        : 'The work completed so far has been kept and charged.',
-      type: 'job_cancelled',
-    });
+    if (error) throw new Error(`Could not record retry: ${error.message}`);
   }
 
   stopHeartbeat(): void {
@@ -206,16 +211,18 @@ export class JobRunner {
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
   }
+}
 
-  private async notify(input: NotificationInput): Promise<void> {
-    const { error } = await this.db.from('notifications').insert({
-      user_id: this.job.user_id,
-      type: input.type ?? 'job',
-      title: input.title.slice(0, 200),
-      body: input.body?.slice(0, 2000) ?? null,
-      link: input.link ?? null,
-    });
-    if (error) console.warn(`[jobs] notification failed: ${error.message}`);
+/** Startup must fail before processing if the PostgREST ownership hook is not loaded. */
+export async function verifyWorkerFencing(url: string, key: string): Promise<void> {
+  const probe = createAdminClient(url, key, {
+    headers: { 'x-worker-job': randomUUID(), 'x-worker-token': randomUUID() },
+  });
+  const { error } = await probe.from('jobs').select('id').limit(0);
+  if (!error?.message.includes('JOB_LEASE_LOST')) {
+    throw new Error(
+      'Worker fencing hook is not active. Apply migration 13 and reload the Data API configuration.',
+    );
   }
 }
 

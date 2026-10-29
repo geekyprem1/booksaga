@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { cleanupAccounts, createAccount, login } from './helpers';
+import { plannedChapters } from '@booksaga/shared';
+import { cleanupAccounts, createAccount, login, service } from './helpers';
 
 /**
  * M2 exit check, in the browser: idea -> Generate Part 1 -> live progress -> book + bible in the DB.
@@ -10,10 +11,10 @@ import { cleanupAccounts, createAccount, login } from './helpers';
  */
 async function workerIsUp(): Promise<boolean> {
   try {
-    const res = await fetch('http://127.0.0.1:3001/healthz', {
+    const res = await fetch(process.env.WORKER_HEALTH_URL ?? 'http://127.0.0.1:3001/healthz', {
       signal: AbortSignal.timeout(1500),
     });
-    return res.ok;
+    return res.ok && (await res.json()).aiMode === 'mock';
   } catch {
     return false;
   }
@@ -51,9 +52,26 @@ test.describe('create series', () => {
 
     // Part 1 written (with chapters), Part 2 unlocked on the roadmap.
     const part1 = page.locator('[aria-label="Part 1"]');
-    await expect(part1).toContainText('generated');
-    await expect(part1).toContainText('9 chapters');
-    await expect(page.locator('[aria-label="Part 2"]')).toContainText('ready');
+    await expect(part1).toContainText('Generated');
+    await expect(page.locator('[aria-label="Part 2"]')).toContainText('Ready to generate');
+    const seriesId = new URL(page.url()).pathname.split('/').at(-1)!;
+    const book = await service
+      .from('books')
+      .select('id, status')
+      .eq('series_id', seriesId)
+      .eq('part_number', 1)
+      .single();
+    expect(book.error).toBeNull();
+    expect(book.data?.status).toBe('generated');
+    const chapters = await service
+      .from('chapters')
+      .select('status, content_text')
+      .eq('book_id', book.data!.id);
+    expect(chapters.error).toBeNull();
+    expect(chapters.data).toHaveLength(plannedChapters('short'));
+    expect(
+      chapters.data?.every((chapter) => chapter.status === 'done' && chapter.content_text?.trim()),
+    ).toBe(true);
 
     // Credits were charged exactly once (FE starts with 300, a short book costs 10).
     await expect(page.getByText('290', { exact: true }).first()).toBeVisible();

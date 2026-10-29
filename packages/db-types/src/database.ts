@@ -957,6 +957,7 @@ export type Database = {
           created_at: string
           credits_reserved: number
           error: string | null
+          execution_token: string | null
           finished_at: string | null
           heartbeat_at: string | null
           id: string
@@ -979,6 +980,7 @@ export type Database = {
           created_at?: string
           credits_reserved?: number
           error?: string | null
+          execution_token?: string | null
           finished_at?: string | null
           heartbeat_at?: string | null
           id?: string
@@ -1001,6 +1003,7 @@ export type Database = {
           created_at?: string
           credits_reserved?: number
           error?: string | null
+          execution_token?: string | null
           finished_at?: string | null
           heartbeat_at?: string | null
           id?: string
@@ -1673,7 +1676,19 @@ export type Database = {
         Args: { p_pool: string; p_user: string }
         Returns: undefined
       }
+      finish_worker_job: {
+        Args: {
+          p_job: string
+          p_message?: string
+          p_notification?: Json
+          p_refund?: boolean
+          p_status: string
+          p_token: string
+        }
+        Returns: undefined
+      }
       grant_plan_credits: { Args: { p_user_plan: string }; Returns: Json }
+      guard_worker_request: { Args: never; Returns: undefined }
       is_admin: { Args: never; Returns: boolean }
       is_agency_owner_of: { Args: { p_user: string }; Returns: boolean }
       owns_book: { Args: { p_book: string }; Returns: boolean }

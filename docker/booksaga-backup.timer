@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly BookSaga database backup
+
+[Timer]
+OnCalendar=Sun *-*-* 02:00:00 UTC
+Persistent=true
+RandomizedDelaySec=900
+
+[Install]
+WantedBy=timers.target

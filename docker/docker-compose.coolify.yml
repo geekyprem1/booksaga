@@ -1,0 +1,93 @@
+# Git-based Coolify Application. Let Coolify manage the public proxy and HTTPS.
+# Base directory: / ; Compose location: /docker/docker-compose.coolify.yml
+
+x-app-env: &app-env
+  NODE_ENV: production
+  APP_URL: ${APP_URL:?Set the public app URL}
+  NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?Set the Supabase project URL}
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?Set the publishable key}
+  SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?Set the private secret key}
+  SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?Set a random 32-byte base64 key}
+  REDIS_URL: redis://redis:6379
+  AI_MODE: ${AI_MODE:-mock}
+  TEXT_API_BASE_URL: ${TEXT_API_BASE_URL:-https://openrouter.ai/api/v1}
+  TEXT_API_KEY: ${TEXT_API_KEY:-}
+  TEXT_MODEL: ${TEXT_MODEL:-deepseek/deepseek-v4.1-flash-1017}
+  TEXT_FAST_MODEL: ${TEXT_FAST_MODEL:-}
+  TEXT_REASONING_EFFORT: ${TEXT_REASONING_EFFORT:-low}
+  REPLICATE_API_TOKEN: ${REPLICATE_API_TOKEN:-}
+  REPLICATE_IMAGE_MODEL: openai/gpt-image-2
+  REPLICATE_IMAGE_QUALITY: low
+  REPLICATE_TTS_MODEL: ${REPLICATE_TTS_MODEL:-jaaari/kokoro-82m}
+  TEXT_RPM: ${TEXT_RPM:-300}
+  REPLICATE_RPM: ${REPLICATE_RPM:-120}
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+
+services:
+  redis:
+    image: redis:7-alpine
+    command:
+      [
+        'redis-server',
+        '--appendonly',
+        'yes',
+        '--maxmemory',
+        '2gb',
+        '--maxmemory-policy',
+        'noeviction',
+      ]
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging: *logging
+
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.web
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    environment:
+      <<: *app-env
+      HOSTNAME: 0.0.0.0
+      PORT: '3000'
+    expose:
+      - '3000'
+    restart: unless-stopped
+    depends_on:
+      redis: { condition: service_healthy }
+    logging: *logging
+
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    environment:
+      <<: *app-env
+      WORKER_QUEUES: text,image,export,audio,system
+      WORKER_HEALTH_PORT: '3001'
+      WORKER_TEXT_CONCURRENCY: ${WORKER_TEXT_CONCURRENCY:-50}
+      WORKER_IMAGE_CONCURRENCY: ${WORKER_IMAGE_CONCURRENCY:-5}
+      WORKER_EXPORT_CONCURRENCY: ${WORKER_EXPORT_CONCURRENCY:-2}
+      WORKER_AUDIO_CONCURRENCY: ${WORKER_AUDIO_CONCURRENCY:-3}
+    init: true
+    shm_size: 1gb
+    stop_grace_period: 10m
+    restart: unless-stopped
+    depends_on:
+      redis: { condition: service_healthy }
+    logging: *logging
+
+volumes:
+  redis_data:

@@ -103,7 +103,7 @@ export default async function CreateSeriesPage({
         defaults={{
           idea,
           genre,
-          plannedBooks: parts ? Number(parts) : undefined,
+          plannedBooks: parts && Number.isFinite(Number(parts)) ? Number(parts) : undefined,
           lengthPreset: (length as LengthPreset | undefined) ?? undefined,
         }}
       />

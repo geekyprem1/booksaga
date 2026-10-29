@@ -6,9 +6,11 @@ import {
 import { chapterHtml } from '@booksaga/exporters/html';
 import { backMatter, frontMatter } from '@booksaga/exporters/matter';
 import { insideMarginFor, TRIM_INCHES, type TrimSize } from '@booksaga/exporters/print';
+import { getGenre } from '@booksaga/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { requireUser } from '@/lib/auth/session';
 import { getAdminDb } from '@/lib/supabase/admin';
+import { loadLatestExportFiles } from '@/lib/exports/latest';
 
 export const metadata = { title: 'KDP Preview' };
 export const dynamic = 'force-dynamic';
@@ -24,23 +26,20 @@ export default async function KdpPreviewPage({
 
   const { data: rows } = await db
     .from('books')
-    .select('id, title, part_number, status, series_id, series:series_id(title, user_id)')
+    .select('id, title, part_number, status, series_id, series!inner(title, user_id, deleted_at)')
+    .eq('series.user_id', user.id)
+    .is('series.deleted_at', null)
     .eq('status', 'generated')
     .order('created_at', { ascending: false })
     .limit(50);
 
-  const books: PreviewBook[] = (rows ?? [])
-    .filter((row) => {
-      const series = row.series as { user_id?: string } | null;
-      return series?.user_id === user.id;
-    })
-    .map((row) => {
-      const series = row.series as { title?: string } | null;
-      return {
-        id: row.id,
-        label: `${series?.title ?? 'Series'} · Part ${row.part_number}: ${row.title || 'Untitled'}`,
-      };
-    });
+  const books: PreviewBook[] = (rows ?? []).map((row) => {
+    const series = row.series as { title?: string } | null;
+    return {
+      id: row.id,
+      label: `${series?.title ?? 'Series'} · Part ${row.part_number}: ${row.title || 'Untitled'}`,
+    };
+  });
 
   if (books.length === 0) {
     return (
@@ -58,7 +57,13 @@ export default async function KdpPreviewPage({
 
   const selectedId = books.some((book) => book.id === requested) ? requested! : books[0]!.id;
 
-  const { data: book } = await db.from('books').select('*').eq('id', selectedId).maybeSingle();
+  const { data: book } = await db
+    .from('books')
+    .select('*, series!inner(user_id, deleted_at)')
+    .eq('id', selectedId)
+    .eq('series.user_id', user.id)
+    .is('series.deleted_at', null)
+    .maybeSingle();
   if (!book) {
     return (
       <Card>
@@ -73,22 +78,18 @@ export default async function KdpPreviewPage({
     .from('series')
     .select('*')
     .eq('id', book.series_id)
+    .eq('user_id', user.id)
+    .is('deleted_at', null)
     .maybeSingle();
+  if (!series) throw new Error('This series is no longer available.');
 
-  const [{ data: chapters }, { data: exportRow }, { data: cover }] = await Promise.all([
+  const [{ data: chapters }, exports, { data: cover }, { data: seriesBooks }] = await Promise.all([
     db
       .from('chapters')
       .select('number, title, content, content_text')
       .eq('book_id', book.id)
       .order('number'),
-    db
-      .from('exports')
-      .select('id, files, created_at')
-      .eq('book_id', book.id)
-      .eq('status', 'ready')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    loadLatestExportFiles(db, book.id),
     db
       .from('covers')
       .select('id, final_path')
@@ -96,12 +97,13 @@ export default async function KdpPreviewPage({
       .eq('type', 'ebook')
       .eq('is_active', true)
       .maybeSingle(),
+    db.from('books').select('part_number, title').eq('series_id', series.id).order('part_number'),
   ]);
 
-  const files = (exportRow?.files ?? {}) as Record<string, string>;
-  const pdfPath = files.pdf ?? null;
-  const zipPath = files.zip ?? null;
-  const pageCount = files.pdfPages ? Number(files.pdfPages) : null;
+  const pdfPath = exports.pdf.pdf ?? null;
+  const zipPath = exports.zip.zip ?? null;
+  const files = exports.wrap;
+  const pageCount = exports.pdf.pdfPages ? Number(exports.pdf.pdfPages) : null;
   const wrapPages = files.wrapPages ? Number(files.wrapPages) : null;
   const wrapStale = wrapPages !== null && pageCount !== null && wrapPages !== pageCount;
 
@@ -123,7 +125,26 @@ export default async function KdpPreviewPage({
     text: chapter.content_text ?? '',
   }));
 
+  const allBooks = seriesBooks ?? [];
+  const nextBook = allBooks.find((other) => other.part_number === book.part_number + 1);
+  const lastPart = Math.max(
+    series.planned_books ?? 1,
+    ...allBooks.map((other) => other.part_number),
+  );
+  const genre = getGenre(series.genre);
+  const genreLine = genre
+    ? genre.isFiction
+      ? `${/^[aeiou]/i.test(genre.label) ? 'An' : 'A'} ${genre.label}`
+      : genre.label
+    : null;
   const matter = {
+    genreLine,
+    readingOrder: allBooks.map((other) => ({
+      partNumber: other.part_number,
+      title: other.title || null,
+    })),
+    isFinalPart: book.part_number >= lastPart,
+    nextTitle: nextBook?.title || null,
     seriesTitle: series?.title ?? 'Series',
     bookTitle: book.title || `Part ${book.part_number}`,
     subtitle: book.subtitle,
@@ -134,10 +155,14 @@ export default async function KdpPreviewPage({
     chapters: chapterList.map((chapter) => ({ number: chapter.number, title: chapter.title })),
   };
 
+  const alsoTitles = allBooks
+    .filter((other) => other.part_number !== book.part_number && other.title)
+    .map((other) => `Book ${other.part_number}: ${other.title}`);
+  const back = backMatter(matter, alsoTitles);
   const ebookHtml = [
     frontMatter(matter),
     ...chapterList.map((chapter) => chapterHtml(chapter)),
-    backMatter(matter, []),
+    back,
   ].join('\n');
 
   const checks: PreflightCheck[] = [
@@ -162,12 +187,12 @@ export default async function KdpPreviewPage({
     },
     {
       id: 'gutter',
-      label: 'Inside margin',
-      status: pageCount === null ? 'warn' : 'pass',
+      label: 'Calculated gutter',
+      status: 'warn',
       detail:
         pageCount === null
           ? 'Calculated from the page count at export time.'
-          : `${insideMarginFor(pageCount)}" gutter for ${pageCount} pages.`,
+          : `${insideMarginFor(pageCount)}" expected for ${pageCount} pages. Inspect the exported PDF to verify the inside margins.`,
     },
     {
       id: 'cover',
@@ -182,7 +207,7 @@ export default async function KdpPreviewPage({
       label: 'Metadata',
       status:
         metadataRow.blurb &&
-        (metadataRow.keywords?.length ?? 0) > 0 &&
+        (metadataRow.keywords?.length ?? 0) >= 7 &&
         (metadataRow.categories?.length ?? 0) > 0
           ? 'pass'
           : 'warn',
@@ -199,8 +224,8 @@ export default async function KdpPreviewPage({
     {
       id: 'next-url',
       label: 'Read Next link',
-      status: metadataRow.readNext?.includes('{{NEXT_BOOK_URL}}') ? 'warn' : 'pass',
-      detail: metadataRow.readNext?.includes('{{NEXT_BOOK_URL}}')
+      status: back.includes('{{NEXT_BOOK_URL}}') ? 'warn' : 'pass',
+      detail: back.includes('{{NEXT_BOOK_URL}}')
         ? 'Replace {{NEXT_BOOK_URL}} with the real Amazon link before uploading.'
         : 'No unresolved placeholder.',
     },

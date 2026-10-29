@@ -14,6 +14,7 @@ import {
   type ExportChapter,
 } from '@booksaga/exporters';
 import type { JobRunner } from '../../lib/jobs';
+import { assertWorkerAccess } from '../../lib/entitlements';
 
 export interface BoxSetJobData {
   jobId: string;
@@ -35,13 +36,16 @@ export async function processBoxSet(
 
   const { data: series } = await db.from('series').select('*').eq('id', data.refId).maybeSingle();
   if (!series) throw new Error(`Series ${data.refId} not found`);
-  if (series.user_id !== data.userId) throw new Error('This series does not belong to the job owner.');
+  if (series.user_id !== data.userId)
+    throw new Error('This series does not belong to the job owner.');
+  await assertWorkerAccess(db, data.userId, { kind: 'boxSet' });
 
   await runner.progress(10, 'Collecting the books');
 
   const { data: books } = await db
     .from('books')
     .select('id, part_number, title, subtitle, metadata, status')
+    .eq('series_id', series.id)
     .in('id', data.bookIds)
     .order('part_number');
 
@@ -107,7 +111,10 @@ export async function processBoxSet(
     });
     description = (result.data as { description: string }).description;
   } catch (err) {
-    console.warn('[box-set] description failed, keeping the fallback:', err instanceof Error ? err.message : err);
+    console.warn(
+      '[box-set] description failed, keeping the fallback:',
+      err instanceof Error ? err.message : err,
+    );
   }
 
   let cover: { buffer: Buffer; mime: string } | null = null;
@@ -193,7 +200,7 @@ export async function processBoxSet(
 
   await runner.progress(70, 'Building the EPUB');
 
-  const basePath = `${data.userId}/${series.id}/box-sets/${data.boxSetId}`;
+  const basePath = `${data.userId}/${series.id}/box-sets/${data.boxSetId}/${runner.executionToken}`;
   const epub = await buildBoxSetEpub({
     id: data.boxSetId,
     seriesTitle: series.title,

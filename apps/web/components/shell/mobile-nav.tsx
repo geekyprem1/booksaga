@@ -11,10 +11,12 @@ export function MobileNav({
   items,
   isAdmin,
   appName,
+  logoUrl,
 }: {
   items: SidebarItem[];
   isAdmin: boolean;
   appName: string;
+  logoUrl: string;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -32,7 +34,7 @@ export function MobileNav({
         >
           <Dialog.Title className="sr-only">Navigation</Dialog.Title>
           <div className="flex items-center justify-between">
-            <Logo name={appName} />
+            <Logo name={appName} logoUrl={logoUrl} />
             <Dialog.Close asChild>
               <Button variant="ghost" size="icon" aria-label="Close menu">
                 <X />

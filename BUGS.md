@@ -1,9 +1,29 @@
 # BookSaga — Bug Report
 
-**Date:** 26 Oct 2026  
-**Scope:** Uncommitted working tree, plus directly related existing code that the new work depends on.  
-**Status:** Investigation only — no source files were changed.  
-**Checks run:** `pnpm test` (75 passed), `pnpm typecheck` (7/7 packages), `pnpm lint` (0 errors, 1 pre-existing warning). The bugs below are logic/UX defects that the existing checks do not catch.
+**Original report:** 26 Oct 2026. Findings and original line references below are retained for context.
+
+## Fix status — 28 Oct 2026
+
+All 30 findings have been addressed in code: 29 fixes in this pass; #2 (`trash_purge`) was already fixed.
+Targeted browser and database integration verification now passes; this is not a production launch sign-off.
+
+| Findings | Implementation status |
+|---|---|
+| #1, #3–#4 | Book-job filtering; preview ownership/deletion filtering before the limit; safe running-head CSS strings |
+| #2 | Existing cron fix verified in source: runs before the jobId guard with a CronRunner |
+| #5–#12 | Genre id/label lookup; locked-book library-image gate; matching preview matter and per-format export lookup; chapter labels; finite/clamped template parts; usable duplicate roadmap with rollback on errors; visible expired export history |
+| #13–#22 | EPUB Contents links; generated Read Next placeholder warning; no AI brief for library images; shared library subscription/poller/dialog; cover summary styling and real palette swatches; consistent keyword threshold; calculated-gutter warning; stale-wrap comparison across exports; checked history insertion |
+| #23–#30 | Log/icon encoding; canonical DFY niche mapping; full cover proportions; cover existence independent of signed URLs with preview fallback; preview ownership/deletion gates; DOCX chapter labels |
+
+**Verification:** `pnpm test` — 100 passed; `pnpm typecheck` — passed; `pnpm lint` — 0 errors, 1 pre-existing unused Badge warning; `pnpm build` — passed. Actual Chromium print smoke passed: malicious title/author could not inject a script, the chapter heading was normalized, and the PDF measured 432 × 648 pt (6 × 9 in).
+
+**Integration follow-up (28 Oct 2026):** Docker/Supabase are running. `pnpm test:db` passed all 68 tests. All 8 targeted Playwright tests passed across `bug-regressions.spec.ts`, `kdp-preview.spec.ts`, `library.spec.ts`, and `cover-studio.spec.ts`. These cover FE template limits, unrelated-job filtering, library queued/active/completed progress without reload, desktop/mobile cover interactions and layout, preview ownership/deletion filtering before the 50-book limit, final-book matter, independent PDF/wrap selection and stale-wrap warnings, expired history, duplicate roadmap creation, Bible editing/export, and settings validation.
+
+The live-update regression exposed a connection race: changes between the server snapshot and the Realtime join could be missed. The shared library subscription now refreshes on connect/reconnect and polls while connecting or disconnected. The updated regression passes. Web typecheck and lint were rerun after this fix (0 lint errors, the same pre-existing Badge warning).
+
+Browser tests used `APP_URL=http://localhost:3000` to match the test web server and `AI_MODE=mock`. One export fixture was corrected to supply `created_at` consistently across a batch insert. These tests use seeded data and simulated worker state changes; they do not exercise paid AI generation or production deployment.
+
+---
 
 **Tags:** `[new]` = introduced by the current uncommitted changes. `[pre-existing]` = already in `HEAD`, but still a real bug. `[verify]` = needs a live render/runtime check to confirm the visual outcome.
 
@@ -730,7 +750,7 @@ Use `displayTitle(chapter.title)` for the TOC and the subheading.
 
 ---
 
-## Verification notes
+## Original verification notes (26 Oct 2026)
 
 - `pnpm test` runs 75 unit tests and passes; the new `replaceParagraph`, cover-quality, color, export-format, and env tests are green.
 - `pnpm typecheck` passes for all 7 packages.

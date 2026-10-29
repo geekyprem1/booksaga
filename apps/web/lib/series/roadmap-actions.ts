@@ -2,12 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import {
-  AppError,
-  assertCan,
-  bookCreditAction,
-  resolveCreditSource,
-} from '@booksaga/shared';
+import { AppError, assertCan, bookCreditAction, resolveCreditSource } from '@booksaga/shared';
 import { enqueueJob, queueForJob, refundCredits, type JobType } from '@booksaga/core';
 import { getAccount } from '@/lib/account';
 import { requireUser } from '@/lib/auth/session';
@@ -99,7 +94,10 @@ export async function generatePartAction(
 
     const action = bookCreditAction(data.lengthPreset);
     const cost = await getCreditCost(action);
-    const source = resolveCreditSource({ id: user.id, parentAgencyId: user.parentAgencyId }, action);
+    const source = resolveCreditSource(
+      { id: user.id, parentAgencyId: user.parentAgencyId },
+      action,
+    );
 
     try {
       const queued = await enqueueJob(db, getQueues(), {
@@ -145,7 +143,7 @@ export async function cancelJobAction(
 
     const { data: job } = await db
       .from('jobs')
-      .select('id, user_id, type, status, ledger_id, idempotency_key, ref_id')
+      .select('id, user_id, type, status, ledger_id, idempotency_key, ref_id, started_at')
       .eq('id', jobId)
       .maybeSingle();
     if (!job) throw new AppError('NOT_FOUND', 'Job not found.');
@@ -155,27 +153,59 @@ export async function cancelJobAction(
     if (job.status !== 'queued' && job.status !== 'active') {
       throw new AppError('CONFLICT', 'This job has already finished.');
     }
+    if (job.status === 'active' && job.type !== 'book') {
+      throw new AppError('CONFLICT', 'This job has already started and cannot be cancelled.');
+    }
 
-    await db.from('jobs').update({ cancel_requested: true }).eq('id', job.id);
+    let request = db.from('jobs').update({ cancel_requested: true }).eq('id', job.id);
+    request =
+      job.type === 'book'
+        ? request.in('status', ['queued', 'active'])
+        : request.eq('status', 'queued');
+    const { data: requested, error: requestError } = await request.select('id').maybeSingle();
+    if (requestError) throw new Error(`Could not request cancellation: ${requestError.message}`);
+    if (!requested)
+      throw new AppError(
+        'CONFLICT',
+        'This job has started or already finished and cannot be cancelled.',
+      );
 
     // Still queued? Take it out of BullMQ and refund immediately.
     if (job.status === 'queued') {
+      // A recovered job has already done work and must use its worker's cancellation policy.
+      if (job.started_at) return { cancelledImmediately: false };
       const queue = getQueues()[queueForJob(job.type as JobType)];
-      const bullJob = await queue.getJob(job.idempotency_key);
-
-      if (bullJob) {
+      const candidates = [
+        job.idempotency_key,
+        `${job.idempotency_key}-r1`,
+        `${job.idempotency_key}-r2`,
+      ];
+      let removed = false;
+      for (const id of candidates) {
+        const bullJob = await queue.getJob(id);
+        if (!bullJob) continue;
+        const state = await bullJob.getState();
+        if (state === 'completed' || state === 'failed') continue;
+        if (state !== 'waiting' && state !== 'delayed' && state !== 'prioritized')
+          return { cancelledImmediately: false };
         try {
           await bullJob.remove();
+          removed = true;
         } catch {
-          // It started between our read and the remove: fall through to the worker-side cancel.
           return { cancelledImmediately: false };
         }
       }
+      if (!removed) return { cancelledImmediately: false };
 
       if (job.ledger_id) {
-        await refundCredits(db, job.ledger_id, 'Cancelled before start').catch(() => undefined);
+        const result = await refundCredits(db, job.ledger_id, 'Cancelled before start');
+        if (result !== 'refunded' && result !== 'already_refunded') {
+          throw new Error(
+            'The credit refund could not be confirmed. Cancellation remains pending.',
+          );
+        }
       }
-      await db
+      const { data: cancelled, error: cancelError } = await db
         .from('jobs')
         .update({
           status: 'cancelled',
@@ -183,7 +213,12 @@ export async function cancelJobAction(
           finished_at: new Date().toISOString(),
           heartbeat_at: null,
         })
-        .eq('id', job.id);
+        .eq('id', job.id)
+        .eq('status', 'queued')
+        .select('id')
+        .maybeSingle();
+      if (cancelError) throw new Error(`Could not finish cancellation: ${cancelError.message}`);
+      if (!cancelled) return { cancelledImmediately: false };
 
       if (job.type === 'book' && job.ref_id) {
         await db.from('books').update({ status: 'ready' }).eq('id', job.ref_id);
@@ -239,7 +274,10 @@ export async function addMorePartsAction(
 
     const action = 'arc_extend' as const;
     const cost = await getCreditCost(action);
-    const source = resolveCreditSource({ id: user.id, parentAgencyId: user.parentAgencyId }, action);
+    const source = resolveCreditSource(
+      { id: user.id, parentAgencyId: user.parentAgencyId },
+      action,
+    );
 
     const queued = await enqueueJob(db, getQueues(), {
       type: 'arc_extend',

@@ -5,7 +5,7 @@
  * manifest has to match the spine exactly. Every XHTML file comes from the shared HTML renderer.
  */
 import JSZip from 'jszip';
-import { chapterHtml, escapeHtml, type ExportChapter } from '../html/render';
+import { chapterHtml, displayTitle, escapeHtml, type ExportChapter } from '../html/render';
 
 export interface EpubInput {
   /** Stable identifier for the dc:identifier (usually the book id). */
@@ -40,7 +40,9 @@ ${body}
 </body>
 </html>`;
 
-const styles = (accent: string) => `body { font-family: Georgia, 'Times New Roman', serif; line-height: 1.55; margin: 0 5%; }
+const styles = (
+  accent: string,
+) => `body { font-family: Georgia, 'Times New Roman', serif; line-height: 1.55; margin: 0 5%; }
 h1, h2 { font-family: Georgia, serif; line-height: 1.2; }
 h1.chapter-title { margin: 2.5em 0 1.5em; font-size: 1.6em; page-break-before: always; }
 .chapter-number { display: block; font-size: 0.55em; letter-spacing: 0.18em; text-transform: uppercase; color: ${accent}; margin-bottom: 0.4em; }
@@ -88,7 +90,11 @@ export async function buildEpub(input: EpubInput): Promise<Buffer> {
   );
 
   zip.file('OEBPS/styles.css', styles(input.accent ?? '#5b4636'));
-  zip.file('OEBPS/front-matter.xhtml', xhtml('Front matter', input.frontHtml));
+  const frontHtml = input.frontHtml.replace(
+    /href="#ch-(\d+)"/g,
+    (_, number: string) => `href="chapter-${number.padStart(2, '0')}.xhtml#ch-${number}"`,
+  );
+  zip.file('OEBPS/front-matter.xhtml', xhtml('Front matter', frontHtml));
   zip.file('OEBPS/back-matter.xhtml', xhtml('Back matter', input.backHtml));
 
   const manifest: string[] = [
@@ -104,7 +110,7 @@ export async function buildEpub(input: EpubInput): Promise<Buffer> {
     const name = `chapter-${String(chapter.number).padStart(2, '0')}.xhtml`;
     zip.file(
       `OEBPS/${name}`,
-      xhtml(`Chapter ${chapter.number}: ${chapter.title}`, chapterHtml(chapter)),
+      xhtml(`Chapter ${chapter.number}: ${displayTitle(chapter.title)}`, chapterHtml(chapter)),
     );
     manifest.push(
       `<item id="ch${chapter.number}" href="${name}" media-type="application/xhtml+xml"/>`,
@@ -133,7 +139,7 @@ export async function buildEpub(input: EpubInput): Promise<Buffer> {
   const navItems = input.chapters
     .map(
       (chapter) =>
-        `<li><a href="chapter-${String(chapter.number).padStart(2, '0')}.xhtml">Chapter ${chapter.number}: ${escapeHtml(chapter.title)}</a></li>`,
+        `<li><a href="chapter-${String(chapter.number).padStart(2, '0')}.xhtml">Chapter ${chapter.number}: ${escapeHtml(displayTitle(chapter.title))}</a></li>`,
     )
     .join('\n');
 
@@ -156,7 +162,7 @@ export async function buildEpub(input: EpubInput): Promise<Buffer> {
 ${input.chapters
   .map(
     (chapter, index) => `    <navPoint id="np-${chapter.number}" playOrder="${index + 1}">
-      <navLabel><text>Chapter ${chapter.number}: ${escapeHtml(chapter.title)}</text></navLabel>
+      <navLabel><text>Chapter ${chapter.number}: ${escapeHtml(displayTitle(chapter.title))}</text></navLabel>
       <content src="chapter-${String(chapter.number).padStart(2, '0')}.xhtml"/>
     </navPoint>`,
   )

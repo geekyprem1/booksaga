@@ -60,7 +60,7 @@ export function RecommendedTemplates({
                 href={href}
                 className="group block overflow-hidden rounded-xl border border-border bg-card/80 transition-colors hover:border-violet-400/40"
               >
-                <div className="relative aspect-[2/3] bg-muted">
+                <div className="relative aspect-[5/8] bg-muted">
                   {template.coverUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -68,7 +68,7 @@ export function RecommendedTemplates({
                       alt={locked ? '' : `Cover of ${template.title}`}
                       loading="lazy"
                       className={cn(
-                        'size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]',
+                        'size-full object-contain',
                         locked && 'scale-105 blur-sm brightness-75',
                       )}
                     />

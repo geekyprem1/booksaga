@@ -338,14 +338,17 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
 
 ## M7 — Admin & Integrations
 
-- [ ] **T7.1** 🎨 Admin Overview: users, active today, books (today/7d/30d), queue depth, failed jobs, AI cost (provider/action/top users)
+- [x] **T7.1** 🎨 Admin Overview: users, active today, books (today/7d/30d), queue depth, failed jobs, AI cost (provider/action/top users)
 - [ ] **T7.2** 🎨 Admin → Bulk Import: CSV upload (`email,name,plans`), dry-run preview (errors per row), confirm, result CSV (passwords, one-time download). Launchpad launch ke liye critical, isliye M7 ke shuru me banana hai
   - _Done when:_ 500-row CSV 5 min ke andar import ho, galat rows clear errors ke saath skip hon, aur existing email pe sirf plans add hon (duplicate user na bane).
   - _Depends:_ T1.18
-- [ ] **T7.3** 🎨 Admin → Plans & Credits: plan limits edit, credit costs edit, daily caps
-- [ ] **T7.3b** 🎨 Admin → Credit Ledger: per-user ledger view (grant/reserve/commit/refund/adjust/revoked), job links, filters
+- [x] **T7.3** 🎨 Admin → Plans & Credits: plan limits edit, credit costs edit, daily caps
+  - `/admin/plans` edits numeric plan limits, book lengths, feature switches, template/DFY tiers, action credit costs and daily cap. The shared web/worker account loader applies stored settings. Browser regressions verify saved capabilities, non-admin direct admin-action rejection and forged Full-length request rejection before a job is created. Direct audiobook, box-set and paperback-wrap actions reject locked users without creating jobs or spending credits. Worker rechecks these features on execution; DB tests verify denied jobs and cross-series box-set isolation.
+- [x] **T7.3b** 🎨 Admin → Credit Ledger: per-user ledger view (grant/reserve/commit/refund/adjust/revoked), job links, filters
+  - `/admin/credits` supports owner ID, status and pool filters, pagination and job links. Browser regression covers grants, reservations, refunds, adjustments, agency owner/acting user and job link. Existing DB suite tests credit state transitions.
   - _Depends:_ T1.8
-- [ ] **T7.4** 🎨 Admin → Purchases log (source filter, refunds)
+- [x] **T7.4** 🎨 Admin → Purchases log (source filter, refunds)
+  - `/admin/purchases` lists purchase records with source and status filters, including refunds and chargebacks, and links to the user. Browser test verifies the filters, user link and non-admin access restriction. Payment-provider refund processing belongs to webhook integrations (T7.5).
 - [ ] **T7.5** ⚙️ Webhook adapters: WarriorPlus (IPN verify + normalize), JVZoo (JVZIPN `cverify` + normalize), routes, toggle-gated (OFF → 404), `webhook_events` idempotency, sale/refund/chargeback/cancel flows (refund → `revoke_plan_credits`), email OFF hone pe `credentials_pending`
   - _Done when:_ sample payload fixtures se unit tests pass hon, aur duplicate webhook pe no-op ho. W+/JVZoo docs se payload format verify karna.
   - _Depends:_ T1.18
@@ -355,32 +358,54 @@ Legend: 🧱 infra · 🗄️ DB · 🎨 UI · ⚙️ worker/backend · 🤖 AI 
   - _Done when:_ OFF pe koi email na jaye. ON pe local Inbucket me welcome email aaye.
 - [ ] **T7.8** 🎨 Admin → Email page (toggle default OFF, SMTP config, templates editor, test). Forgot-password UI toggle se link ho
   - _Depends:_ T7.7
-- [ ] **T7.9** 🎨 Admin → Jobs monitor (BullMQ counts, job list/detail, logs, retry, cancel)
+- [x] **T7.9** 🎨 Admin → Jobs monitor (BullMQ counts, job list/detail, logs, retry, cancel)
+  - Implemented queue counts, filters, job details, AI usage, stable admin retries and cancellation controls. DB regressions verify cancellation before start, recovery races, refund/charge boundaries, retry-limit settlement and unconfirmed-refund messaging.
+  - Migration 13 fences all processor Data API mutations in the ownership-check transaction. Each execution rotates a token; recovery revokes it. Redis lock checks stop displaced processes before further requests or AI results. Credits, book state, job status and notifications settle atomically. Migration 15 links a job reservation during the debit transaction, preventing an interrupted enqueue from leaving an unlinked reservation.
+  - A real two-process BullMQ test pauses an old processor, removes its Redis lock, lets a second worker recover/complete, then resumes the old process. Only the replacement's content and one credit settlement/notification remain. Raw stale-token content, heartbeat, refund and finish requests are rejected at the Data API boundary. The worker refuses startup when the fencing hook is absent.
 - [ ] **T7.10** 🎨 Admin → Settings (app name, logo, support email, upgrade URLs per OTO, AI model overrides + price table, maintenance mode, legal pages content)
-- [ ] **T7.11** 🎨 Admin "View as user" (read-only impersonation, mutations blocked, audit logged)
+  - `/admin/settings` supports app name, support email/URL, OTO1–OTO5 links, maintenance notice, logo upload, editing four legal pages, and text model/price overrides, with admin authorization and audit logging. The worker reads AI overrides at startup; restart it after changes. Provider-reported costs take precedence. Browser tests verify settings, upgrade redirect, maintenance, logo upload, legal editing/sanitization and AI settings save. Local DB integration verifies worker settings loading, default fallback, invalid configuration rejection and model/pricing use with a simulated provider; a live provider check remains.
+- [x] **T7.11** 🎨 Admin "View as user" (read-only impersonation, mutations blocked, audit logged)
 
-**Exit check M7:** Launchpad flow (CSV import → plans assign → credentials CSV/copy → login) kaam kare. W+/JVZoo OFF pe 404 aaye, aur ON + test payload pe user + plan ban jaye (aur refund payload pe plan revoke + credits cap). Email OFF/ON dono modes sahi chalein.
+**Exit check M7 (current scope):** Manual Users → create buyer → assign plans → copy credentials → buyer login. CSV, webhooks/integrations and email are deferred; their original acceptance criteria apply only when that work is resumed.
 
 ---
 
 ## M8 — Hardening & Launch
 
-- [ ] **T8.1** 🧱 Rate limits (login, AI actions, webhooks, downloads) via Redis
-- [ ] **T8.2** 🧱 Security headers (CSP, HSTS, frame-deny), sanitize-html on render/export, upload re-encode, `server-only` audit, `pnpm audit`
-- [ ] **T8.3** 🧪 E2E Playwright suite (ARCH §15) mock AI ke saath: core user flow + admin flow + gating flow
+- [x] **T8.1** 🧱 Rate limits (login, AI actions, webhooks, downloads) via Redis
+  - Login, generation and download counters are implemented and tested. Webhook limits are deferred with webhook implementation.
+- [x] **T8.2** 🧱 Security headers (CSP, HSTS, frame-deny), sanitize-html on render/export, upload re-encode, `server-only` audit, `pnpm audit`
+- [x] **T8.3** 🧪 E2E Playwright suite (ARCH §15) mock AI ke saath: core user flow + admin flow + gating flow
+  - Browser regressions pass across the user, admin, legal/security and gating flows. The two formerly skipped generation flows now pass against the actual Linux web/worker images with an isolated Redis: Part 1 and saved chapters, Part 2 generation/Part 3 unlock, chapter autosave and exact credit charges. Tests use the current Short preset instead of stale nine-chapter assumptions.
 - [ ] **T8.4** 🧪 Load test: 200 concurrent book jobs (mock AI, realistic artificial latency). Queue stable rahe, koi credit leak na ho (ledger reconcile script), aur actual queue clear time measure karke PRD §15 me update karo
-- [ ] **T8.4b** 🎨 Legal pages (PRD §8.19): `/legal/terms`, `/legal/privacy`, `/legal/refund`, `/legal/ai-disclosure`, admin-editable markdown, login page + footer links
-- [ ] **T8.5** 🧱 Production Dockerfiles (web standalone, worker with chromium + ffmpeg + fonts), `docker-compose.prod.yml`, Caddyfile, healthchecks, log rotation
+- [x] **T8.4b** 🎨 Legal pages (PRD §8.19): `/legal/terms`, `/legal/privacy`, `/legal/refund`, `/legal/ai-disclosure`, admin-editable markdown, login page + footer links
+  - Migration 14 supplies editable terms/privacy/refund/AI-disclosure pages, owner-provided support contact and a 30-day refund window. All four public pages and legal-editor sanitization pass browser verification. Seller identity and jurisdiction-specific details can be updated when supplied.
+- [x] **T8.5** 🧱 Production Dockerfiles (web standalone, worker with chromium + ffmpeg + fonts), `docker-compose.prod.yml`, Caddyfile, healthchecks, log rotation
+  - Both Linux images build; Chromium PDF/fonts/native cover/ffmpeg smoke passes. Combined web/worker/Redis startup and mock generation pass; readiness, HSTS/CSP/frame-deny and excluded env files are recorded in `CONTAINER_CHECK_REPORT.json`. Both standalone and Coolify Compose definitions validate. Coolify setup uses `docker/docker-compose.coolify.yml` and dashboard variables, without a separate Caddy/env file.
 - [ ] **T8.6** 🧱 VPS setup (8 vCPU / 16 GB): Docker, firewall (sirf 22/80/443), SSH keys, unattended upgrades, UptimeRobot
 - [ ] **T8.7** 🗄️ Supabase Cloud go-live: project create → `supabase link` → `supabase db push` → auth settings (signup OFF, URLs) → storage verify → `seed-prod.ts` → admin create → templates seed job
   - _Done when:_ prod me admin login ho, aur saare migrations apply hon (`supabase migration list` match kare).
 - [ ] **T8.8** 🧱 Backups: Supabase backups verify + weekly `pg_dump` offsite
 - [ ] **T8.9** 🧪 Live smoke on prod (real keys): 1 Short book + cover + export + audiobook chapter. Cost aur time record
-- [ ] **T8.10** 📄 Docs: README (local setup, deploy), admin runbook (users banana, CSV, refunds, failed jobs, integrations ON karna, email ON karna)
+- [x] **T8.10** 📄 Docs: README (local setup, deploy), admin runbook (users banana, CSV, refunds, failed jobs, integrations ON karna, email ON karna)
 
 **Exit check M8 (Launch ready):** Prod pe real flow pass ho, backups set hon, monitoring ON ho, admin runbook ready ho.
 
 ---
+
+---
+
+## Scope update — 29 Oct 2026
+
+Owner deferred **CSV import (T7.2), payment webhooks/integrations (T7.5–T7.6), SMTP/email (T7.7–T7.8)** and requested skipping further **200-book load testing (T8.4)**. These unchecked items are outside the current release scope. Manual Admin → Users provisioning and credential copying remain the delivery flow.
+
+Support: **softwarevh@gmail.com**. Refund policy: **30 calendar days**. Migration 14 supplies four editable public policies and the support address while preserving existing policy edits. The owner will deploy from GitHub through Coolify; the domain will be chosen later. See `SUPABASE_COOLIFY.md` for setup and the required 16 migrations. Migration 16 supplies explicit hook/sequence grants for fresh Supabase projects.
+
+Local verification: 192 unit/database tests pass; production Next.js build passes; the dependency audit reports zero advisories. Production Docker images build, and Linux Chromium/font/canvas/ffmpeg smoke passes. Browser regressions cover admin settings, ledger, gating, read-only preview/direct mutation rejection, all policy pages, nonce CSP, login rate limits, branding, library and exports. See docs/LAUNCH.md and docs/ADMIN_RUNBOOK.md for operations and remaining infrastructure steps.
+
+T7.10 is implemented and tested with a simulated provider; its live-provider override check remains for the production smoke. T8.6–T8.9 require real VPS/Supabase access, offsite/restore setup and production keys. Backup files and timer are prepared; they have not been installed or restore-tested on the production infrastructure. No production launch is claimed.
+
+The historical mock load report completed before the owner requested skipping further load testing. Its temporary data was cleaned up; it is not a real-provider or VPS-capacity measurement.
 
 ## Dependency Overview
 

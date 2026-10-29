@@ -29,6 +29,7 @@ export default async function SeriesRoadmapPage({ params }: { params: Promise<{ 
       ? db
           .from('jobs')
           .select('id, ref_id, status, progress, step_label')
+          .eq('type', 'book')
           .in('ref_id', bookIds)
           .in('status', ['queued', 'active'])
       : Promise.resolve({

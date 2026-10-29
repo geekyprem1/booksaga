@@ -70,7 +70,7 @@ export function SeriesCard({ series }: { series: DashboardSeries }) {
         <Link
           href={`/series/${series.id}`}
           aria-label={`Open ${series.title}`}
-          className="relative aspect-[2/3] w-24 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-muted shadow-lg shadow-black/40"
+          className="relative aspect-[5/8] w-24 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-muted shadow-lg shadow-black/40"
         >
           {series.coverUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -78,7 +78,7 @@ export function SeriesCard({ series }: { series: DashboardSeries }) {
               src={series.coverUrl}
               alt={`Cover of ${series.title}`}
               loading="lazy"
-              className="size-full object-cover"
+              className="size-full object-contain"
             />
           ) : (
             <span className="flex size-full flex-col items-center justify-center gap-1 bg-gradient-to-br from-violet-600/30 via-card to-pink-600/20 p-2 text-center text-muted-foreground">
@@ -132,9 +132,7 @@ export function SeriesCard({ series }: { series: DashboardSeries }) {
         {visible.map((part) => (
           <PartChip key={part.number} part={part} />
         ))}
-        {hidden > 0 ? (
-          <span className="text-xs text-muted-foreground">+{hidden}</span>
-        ) : null}
+        {hidden > 0 ? <span className="text-xs text-muted-foreground">+{hidden}</span> : null}
       </div>
 
       <div className="flex gap-2">

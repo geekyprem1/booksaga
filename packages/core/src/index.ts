@@ -5,3 +5,4 @@ export * from './db';
 export * from './password';
 export * from './provisioning';
 export * from './queue';
+export * from './rate-limit';

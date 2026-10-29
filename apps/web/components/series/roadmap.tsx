@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -19,6 +19,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/input';
 import { JobProgressDialog } from '@/components/jobs/job-progress-dialog';
 import { getBrowserClient } from '@/lib/supabase/client';
+import { LibraryLiveContext, type RoadmapJob } from './library-live';
 import {
   addMorePartsAction,
   cancelJobAction,
@@ -71,9 +72,12 @@ export function Roadmap({
   const [presetByPart, setPresetByPart] = useState<Record<number, LengthPreset>>(() =>
     Object.fromEntries(parts.map((p) => [p.partNumber, p.lengthPreset])),
   );
-  const [activeJob, setActiveJob] = useState<{ jobId: string; kind: 'generate' | 'extend' } | null>(
-    null,
-  );
+  const sharedLive = useContext(LibraryLiveContext);
+  const [activeJob, setLocalJob] = useState<RoadmapJob | null>(null);
+  const setActiveJob = (job: RoadmapJob | null) => {
+    if (sharedLive) sharedLive.openJob(job);
+    else setLocalJob(job);
+  };
   const [busy, setBusy] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<RoadmapPart | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +90,7 @@ export function Roadmap({
   // Realtime: any change to this series' books, or to one of the user's jobs, refreshes the server
   // data (progress, statuses, credits). Debounced so a burst of updates costs one render.
   useEffect(() => {
-    if (readOnly) return;
+    if (readOnly || sharedLive) return;
     const supabase = getBrowserClient();
     let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -115,7 +119,7 @@ export function Roadmap({
       if (poll) clearInterval(poll);
       void supabase.removeChannel(channel);
     };
-  }, [seriesId, router, anyGenerating, readOnly]);
+  }, [seriesId, router, anyGenerating, readOnly, sharedLive]);
 
   async function handleGenerate(part: RoadmapPart) {
     setError(null);
@@ -455,10 +459,13 @@ export function Roadmap({
         >
           <ul className="mb-5 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
             <li>Not started yet: it leaves the queue and your credits are refunded in full.</li>
-            <li>Already writing: it stops after the current chapter. Chapters already written are kept.</li>
             <li>
-              Less than 20% of the chapters written: full refund. 20% or more: credits are kept for the
-              work done.
+              Already writing: it stops after the current chapter. Chapters already written are
+              kept.
+            </li>
+            <li>
+              Less than 20% of the chapters written: full refund. 20% or more: credits are kept for
+              the work done.
             </li>
           </ul>
           <div className="flex justify-end gap-2">
@@ -476,20 +483,24 @@ export function Roadmap({
           </div>
         </DialogContent>
       </Dialog>
-      <JobProgressDialog
-        jobId={activeJob?.jobId ?? null}
-        title={activeJob?.kind === 'extend' ? 'Extending the series arc' : 'Writing the next part'}
-        description={
-          activeJob?.kind === 'extend'
-            ? 'New parts are being planned and added to the roadmap.'
-            : 'Outline, chapters, continuity pass and metadata.'
-        }
-        onClose={() => setActiveJob(null)}
-        onSettled={() => {
-          setActiveJob(null);
-          router.refresh();
-        }}
-      />
+      {!sharedLive && (
+        <JobProgressDialog
+          jobId={activeJob?.jobId ?? null}
+          title={
+            activeJob?.kind === 'extend' ? 'Extending the series arc' : 'Writing the next part'
+          }
+          description={
+            activeJob?.kind === 'extend'
+              ? 'New parts are being planned and added to the roadmap.'
+              : 'Outline, chapters, continuity pass and metadata.'
+          }
+          onClose={() => setActiveJob(null)}
+          onSettled={() => {
+            setActiveJob(null);
+            router.refresh();
+          }}
+        />
+      )}
     </section>
   );
 }

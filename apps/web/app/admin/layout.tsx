@@ -7,6 +7,7 @@ import { requireAdmin } from '@/lib/auth/session';
 import { getAppInfo } from '@/lib/settings';
 
 export const metadata = { title: 'Admin' };
+export const dynamic = 'force-dynamic';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const [admin, app] = await Promise.all([requireAdmin(), getAppInfo()]);
@@ -15,7 +16,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="app-backdrop min-h-dvh">
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 lg:px-8">
-          <Logo name={app.name} href="/admin" />
+          <Logo name={app.name} href="/admin" logoUrl={app.logoUrl} />
           <span className="hidden items-center gap-1 rounded-full bg-primary/20 px-2.5 py-1 text-xs font-semibold text-violet-200 sm:inline-flex">
             <ShieldCheck className="size-3.5" aria-hidden="true" /> Admin
           </span>

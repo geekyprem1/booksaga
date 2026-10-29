@@ -118,6 +118,21 @@ describe('resolveEntitlements', () => {
     expect(e.dailyBookCap).toBe(3);
   });
 
+  it('combines configured plan limits while retaining reseller restrictions and the system cap', () => {
+    const configured = {
+      fe: { maxSeries: 2, maxBooksPerSeries: 4, lengthPresets: ['short'] as const },
+      oto1: { maxSeries: 12, maxBooksPerSeries: 99 },
+    };
+    const limits = { ...configured, fe: { ...configured.fe, lengthPresets: ['short' as const] } };
+    const buyer = resolveEntitlements(['fe', 'oto1'], {}, { dailyBookCap: 7 }, limits);
+    expect(buyer.maxSeries).toBe(12);
+    expect(buyer.maxBooksPerSeries).toBe(30);
+    expect(buyer.dailyBookCap).toBe(7);
+    const reseller = resolveEntitlements(['fe', 'oto1'], { isResellerCustomer: true }, {}, limits);
+    expect(reseller.maxSeries).toBe(2);
+    expect(reseller.lengthPresets).toEqual(['short']);
+  });
+
   it('ignores duplicate plan codes', () => {
     expect(resolveEntitlements(['fe', 'fe']).maxSeries).toBe(3);
   });

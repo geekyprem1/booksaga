@@ -1,9 +1,12 @@
 import {
   isPlanCode,
+  planLimitsSchema,
+  DEFAULT_DAILY_BOOK_CAP,
   resolveEntitlements,
   type CreditPool,
   type Entitlements,
   type PlanCode,
+  type PlanLimits,
 } from '@booksaga/shared';
 import type { DbClient } from './db';
 
@@ -66,6 +69,26 @@ export async function loadBalances(db: DbClient, userId: string): Promise<Balanc
  * (use the service-role client for that case).
  */
 export async function loadAccount(db: DbClient, profile: AccountProfile): Promise<Account> {
+  const [planConfig, settings] = await Promise.all([
+    db.from('plans').select('code, limits'),
+    db.from('app_settings').select('value').eq('key', 'limits').maybeSingle(),
+  ]);
+  if (planConfig.error || settings.error) throw new Error('Could not load entitlement settings.');
+  const limits: Partial<Record<PlanCode, Partial<PlanLimits>>> = {};
+  for (const row of planConfig.data ?? []) {
+    if (!isPlanCode(row.code)) continue;
+    const parsed = planLimitsSchema.safeParse(row.limits);
+    if (!parsed.success) throw new Error(`Invalid limits for plan ${row.code}.`);
+    limits[row.code] = parsed.data;
+  }
+  const cap = (settings.data?.value as { daily_book_cap?: unknown } | null)?.daily_book_cap;
+  if (
+    cap !== undefined &&
+    (!Number.isInteger(cap) || (cap as number) < 1 || (cap as number) > 100000)
+  ) {
+    throw new Error('Invalid daily book cap.');
+  }
+  const dailyBookCap = typeof cap === 'number' ? cap : DEFAULT_DAILY_BOOK_CAP;
   if (profile.parentAgencyId) {
     const ownerId = profile.parentAgencyId;
     const [ownerPlans, ownerBalances, link] = await Promise.all([
@@ -83,7 +106,12 @@ export async function loadAccount(db: DbClient, profile: AccountProfile): Promis
     const remaining = Math.max(allotment - used, 0);
     return {
       plans: ownerPlans,
-      entitlements: resolveEntitlements(ownerPlans),
+      entitlements: resolveEntitlements(
+        ownerPlans,
+        {},
+        ownerPlans.length ? { dailyBookCap } : {},
+        limits,
+      ),
       // A client has no pool of their own: spendable agency credits are capped by their allotment.
       balances: {
         main: 0,
@@ -103,7 +131,12 @@ export async function loadAccount(db: DbClient, profile: AccountProfile): Promis
   ]);
   return {
     plans,
-    entitlements: resolveEntitlements(plans, { isResellerCustomer }),
+    entitlements: resolveEntitlements(
+      plans,
+      { isResellerCustomer },
+      plans.length || isResellerCustomer ? { dailyBookCap } : {},
+      limits,
+    ),
     balances,
     isAgencyClient: false,
     isResellerCustomer,

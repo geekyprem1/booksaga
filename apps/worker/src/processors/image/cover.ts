@@ -46,7 +46,11 @@ export async function processCover(
   const { db, ai } = deps;
 
   if (data.recompose && data.coverId && data.layers) {
-    return recomposeCover({ db }, runner, data as CoverJobData & { coverId: string; layers: CoverLayer[] });
+    return recomposeCover(
+      { db },
+      runner,
+      data as CoverJobData & { coverId: string; layers: CoverLayer[] },
+    );
   }
 
   const { data: book } = await db.from('books').select('*').eq('id', data.refId).maybeSingle();
@@ -58,7 +62,8 @@ export async function processCover(
     .eq('id', book.series_id)
     .maybeSingle();
   if (!series) throw new Error(`Series ${book.series_id} not found`);
-  if (series.user_id !== data.userId) throw new Error('This book does not belong to the job owner.');
+  if (series.user_id !== data.userId)
+    throw new Error('This book does not belong to the job owner.');
 
   const { data: bibleRow } = await db
     .from('series_bible')
@@ -71,7 +76,7 @@ export async function processCover(
 
   let style = series.cover_style as CoverBrief | null;
 
-  if (!style?.artPrompt) {
+  if (!style?.artPrompt && !data.sourceImagePath) {
     const input = {
       seriesTitle: series.title,
       genre: series.genre,
@@ -94,7 +99,10 @@ export async function processCover(
       style = brief.data;
     } catch (err) {
       // A bad brief must not block the cover: fall back to a genre-appropriate direction.
-      console.warn('[cover] brief failed, using the fallback:', err instanceof Error ? err.message : err);
+      console.warn(
+        '[cover] brief failed, using the fallback:',
+        err instanceof Error ? err.message : err,
+      );
       style = fallbackBrief(input);
     }
 
@@ -128,8 +136,7 @@ export async function processCover(
     artBuffer = Buffer.from(await download.data.arrayBuffer());
     const ext = sourceImagePath.split('.').pop()?.toLowerCase() ?? 'png';
     artPath = `${basePath}/${coverId}.${ext}`;
-    const contentType =
-      ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    const contentType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
     const copy = await db.storage
       .from('cover-art')
       .upload(artPath, artBuffer, { contentType, upsert: true });
@@ -176,8 +183,14 @@ export async function processCover(
   const [ebook, print] =
     data.textMode === 'ai'
       ? await Promise.all([
-          sharp(artBuffer).resize(1600, 2560, { fit: 'cover', position: 'centre' }).jpeg({ quality: 92 }).toBuffer(),
-          sharp(artBuffer).resize(1856, 2784, { fit: 'cover', position: 'centre' }).jpeg({ quality: 92 }).toBuffer(),
+          sharp(artBuffer)
+            .resize(1600, 2560, { fit: 'cover', position: 'centre' })
+            .jpeg({ quality: 92 })
+            .toBuffer(),
+          sharp(artBuffer)
+            .resize(1856, 2784, { fit: 'cover', position: 'centre' })
+            .jpeg({ quality: 92 })
+            .toBuffer(),
         ])
       : await Promise.all([
           composeCover({
@@ -312,8 +325,8 @@ async function recomposeCover(
   ]);
 
   const basePath = cover.art_path.replace(/\/[^/]+$/, '');
-  const ebookPath = `${basePath}/ebook-${cover.id}.jpg`;
-  const printPath = `${basePath}/print-${cover.id}.jpg`;
+  const ebookPath = `${basePath}/ebook-${cover.id}-${runner.executionToken}.jpg`;
+  const printPath = `${basePath}/print-${cover.id}-${runner.executionToken}.jpg`;
 
   const [ebookUpload, printUpload] = await Promise.all([
     db.storage.from('covers').upload(ebookPath, ebook, { contentType: 'image/jpeg', upsert: true }),

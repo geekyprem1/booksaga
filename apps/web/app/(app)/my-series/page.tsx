@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/input';
 import { SeriesCardActions } from '@/components/series/series-card-actions';
 import { Roadmap, type RoadmapPart } from '@/components/series/roadmap';
+import { LibraryLive } from '@/components/series/library-live';
 import type { LengthPreset } from '@booksaga/shared';
 import { getAccount } from '@/lib/account';
 import { getCreditCosts } from '@/lib/credits';
@@ -90,6 +91,7 @@ export default async function MySeriesPage({
       ? db
           .from('jobs')
           .select('id, ref_id, status, progress, step_label')
+          .eq('type', 'book')
           .in('ref_id', bookIds)
           .in('status', ['queued', 'active'])
       : Promise.resolve({ data: [] }),
@@ -155,152 +157,159 @@ export default async function MySeriesPage({
   const genres = [...new Set((allSeries ?? []).map((s) => s.genre))].sort();
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-extrabold">{trash ? 'Trash' : 'My Series'}</h1>
-          <p className="mt-1 text-muted-foreground">
-            {trash
-              ? 'Deleted series stay here for 30 days, then they are purged.'
-              : `${list.length} series · pick up where you left off.`}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button asChild variant="secondary">
-            <Link href={trash ? '/my-series' : '/my-series?trash=1'}>
-              {trash ? 'Back to My Series' : 'Trash'}
-            </Link>
-          </Button>
-          <Button asChild>
-            <Link href="/create-series">
-              <Plus aria-hidden="true" /> New series
-            </Link>
-          </Button>
-        </div>
-      </header>
-
-      <form method="get" className="flex flex-wrap items-end gap-2">
-        {trash ? <input type="hidden" name="trash" value="1" /> : null}
-        <div className="relative min-w-56 flex-1">
-          <Search
-            className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <Input
-            name="q"
-            defaultValue={q}
-            aria-label="Search series"
-            placeholder="Search title, idea or pen name…"
-            className="pl-9"
-          />
-        </div>
-        <Select name="status" defaultValue={status ?? ''} aria-label="Status" className="w-36">
-          <option value="">All statuses</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </Select>
-        <Select name="genre" defaultValue={genre} aria-label="Genre" className="w-44">
-          <option value="">All genres</option>
-          {genres.map((g) => (
-            <option key={g} value={g}>
-              {g}
-            </option>
-          ))}
-        </Select>
-        <Select name="sort" defaultValue={sort} aria-label="Sort" className="w-36">
-          <option value="recent">Recently updated</option>
-          <option value="name">Name (A–Z)</option>
-        </Select>
-        <Button type="submit" variant="secondary">
-          Apply
-        </Button>
-      </form>
-
-      {list.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 p-12 text-center">
-            <BookOpen className="size-7 text-violet-300" aria-hidden="true" />
-            <p className="font-semibold">{trash ? 'Trash is empty' : 'No series yet'}</p>
-            <p className="max-w-sm text-sm text-muted-foreground">
+    <LibraryLive
+      userId={user.id}
+      seriesIds={ids}
+      pending={activeJobs.size > 0 || (books ?? []).some((book) => book.status === 'generating')}
+      enabled={!trash}
+    >
+      <div className="flex flex-col gap-6">
+        <header className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-3xl font-extrabold">{trash ? 'Trash' : 'My Series'}</h1>
+            <p className="mt-1 text-muted-foreground">
               {trash
-                ? 'Deleted series will appear here.'
-                : 'Turn one idea into a connected, KDP-ready series.'}
+                ? 'Deleted series stay here for 30 days, then they are purged.'
+                : `${list.length} series · pick up where you left off.`}
             </p>
-            {!trash ? (
-              <Button asChild>
-                <Link href="/create-series">Create your first series</Link>
-              </Button>
-            ) : null}
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="flex min-w-0 flex-col gap-4">
-          {list.map((item) => {
-            const stats = bySeries.get(item.id) ?? { written: 0, total: 0, words: 0 };
-            return (
-              <article
-                key={item.id}
-                aria-label={`Series: ${item.title}`}
-                className="min-w-0 rounded-xl border border-border bg-card/40 p-3"
-              >
-                <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <Link
-                      href={`/series/${item.id}`}
-                      className="text-base font-bold hover:underline"
-                    >
-                      {item.title}
-                    </Link>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {item.genre} · {item.pen_name}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      <Badge
-                        variant={
-                          item.status === 'active'
-                            ? 'success'
-                            : item.status === 'archived'
-                              ? 'muted'
-                              : 'default'
-                        }
-                      >
-                        {item.status}
-                      </Badge>
-                      <Badge variant="muted">
-                        {stats.written}/{item.planned_books} parts
-                      </Badge>
-                      {stats.words > 0 ? (
-                        <Badge variant="muted">{formatNumber(stats.words)} words</Badge>
-                      ) : null}
-                    </div>
-                  </div>
+          </div>
+          <div className="flex gap-2">
+            <Button asChild variant="secondary">
+              <Link href={trash ? '/my-series' : '/my-series?trash=1'}>
+                {trash ? 'Back to My Series' : 'Trash'}
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/create-series">
+                <Plus aria-hidden="true" /> New series
+              </Link>
+            </Button>
+          </div>
+        </header>
 
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Button asChild size="sm" variant="secondary">
-                      <Link href={`/series/${item.id}`}>Open</Link>
-                    </Button>
-                    <SeriesCardActions seriesId={item.id} status={item.status} inTrash={trash} />
-                  </div>
-                </header>
-                <Roadmap
-                  seriesId={item.id}
-                  parts={partsBySeries.get(item.id) ?? []}
-                  credits={credits}
-                  costs={costs}
-                  allowedPresets={account.entitlements.lengthPresets as LengthPreset[]}
-                  plannedBooks={item.planned_books}
-                  maxBooks={account.entitlements.maxBooksPerSeries}
-                  genre={item.genre}
-                  readOnly={trash}
-                />
-              </article>
-            );
-          })}
-        </div>
-      )}
-    </div>
+        <form method="get" className="flex flex-wrap items-end gap-2">
+          {trash ? <input type="hidden" name="trash" value="1" /> : null}
+          <div className="relative min-w-56 flex-1">
+            <Search
+              className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              name="q"
+              defaultValue={q}
+              aria-label="Search series"
+              placeholder="Search title, idea or pen name…"
+              className="pl-9"
+            />
+          </div>
+          <Select name="status" defaultValue={status ?? ''} aria-label="Status" className="w-36">
+            <option value="">All statuses</option>
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </Select>
+          <Select name="genre" defaultValue={genre} aria-label="Genre" className="w-44">
+            <option value="">All genres</option>
+            {genres.map((g) => (
+              <option key={g} value={g}>
+                {g}
+              </option>
+            ))}
+          </Select>
+          <Select name="sort" defaultValue={sort} aria-label="Sort" className="w-36">
+            <option value="recent">Recently updated</option>
+            <option value="name">Name (A–Z)</option>
+          </Select>
+          <Button type="submit" variant="secondary">
+            Apply
+          </Button>
+        </form>
+
+        {list.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center gap-3 p-12 text-center">
+              <BookOpen className="size-7 text-violet-300" aria-hidden="true" />
+              <p className="font-semibold">{trash ? 'Trash is empty' : 'No series yet'}</p>
+              <p className="max-w-sm text-sm text-muted-foreground">
+                {trash
+                  ? 'Deleted series will appear here.'
+                  : 'Turn one idea into a connected, KDP-ready series.'}
+              </p>
+              {!trash ? (
+                <Button asChild>
+                  <Link href="/create-series">Create your first series</Link>
+                </Button>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="flex min-w-0 flex-col gap-4">
+            {list.map((item) => {
+              const stats = bySeries.get(item.id) ?? { written: 0, total: 0, words: 0 };
+              return (
+                <article
+                  key={item.id}
+                  aria-label={`Series: ${item.title}`}
+                  className="min-w-0 rounded-xl border border-border bg-card/40 p-3"
+                >
+                  <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/series/${item.id}`}
+                        className="text-base font-bold hover:underline"
+                      >
+                        {item.title}
+                      </Link>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {item.genre} · {item.pen_name}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <Badge
+                          variant={
+                            item.status === 'active'
+                              ? 'success'
+                              : item.status === 'archived'
+                                ? 'muted'
+                                : 'default'
+                          }
+                        >
+                          {item.status}
+                        </Badge>
+                        <Badge variant="muted">
+                          {stats.written}/{item.planned_books} parts
+                        </Badge>
+                        {stats.words > 0 ? (
+                          <Badge variant="muted">{formatNumber(stats.words)} words</Badge>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Button asChild size="sm" variant="secondary">
+                        <Link href={`/series/${item.id}`}>Open</Link>
+                      </Button>
+                      <SeriesCardActions seriesId={item.id} status={item.status} inTrash={trash} />
+                    </div>
+                  </header>
+                  <Roadmap
+                    seriesId={item.id}
+                    parts={partsBySeries.get(item.id) ?? []}
+                    credits={credits}
+                    costs={costs}
+                    allowedPresets={account.entitlements.lengthPresets as LengthPreset[]}
+                    plannedBooks={item.planned_books}
+                    maxBooks={account.entitlements.maxBooksPerSeries}
+                    genre={item.genre}
+                    readOnly={trash}
+                  />
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </LibraryLive>
   );
 }

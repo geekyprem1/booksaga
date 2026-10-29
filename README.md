@@ -118,3 +118,28 @@ First time running e2e: `pnpm --filter @booksaga/web exec playwright install chr
 
 Only through `supabase/migrations/*.sql`. Never edit the production schema by hand.
 Production go-live: `supabase link --project-ref <ref>` then `supabase db push`.
+
+## VPS deployment and current scope
+
+Use [the VPS launch guide](docs/LAUNCH.md), [production env example](docker/production.env.example)
+and [admin runbook](docs/ADMIN_RUNBOOK.md). The guide supports a private SSH preview before a
+domain is chosen, then Caddy HTTPS when the domain is ready. Web and worker images have healthchecks;
+Redis and worker ports are private, logs rotate and a weekly offsite database-backup timer is supplied.
+Storage-object backups and a real restore rehearsal still need infrastructure configuration.
+
+For **GitHub → Coolify**, use [the Supabase/Coolify guide](docs/SUPABASE_COOLIFY.md) and
+`docker/docker-compose.coolify.yml`. This variant uses Coolify's proxy and dashboard environment
+variables. Public traffic goes to the web service on internal port 3000; worker and Redis stay private.
+
+CSV import, payment webhooks/integrations, SMTP/email and further 200-book load tests are deferred
+at the owner's request. Provision buyers manually through Admin → Users. Support contact is
+softwarevh@gmail.com and the published refund window is 30 days.
+
+Worker fencing requires migrations 13–16 and the matching new worker image. Stop old workers before
+applying these migrations; old binaries do not send the fencing headers. The new worker fails its
+startup probe if the Data API ownership hook is not active. Its Redis lock and per-execution token
+protect content, progress and credit settlement during recovery.
+
+`pnpm test:db` and `pnpm test:all` now require local Supabase **and Redis**. Their recovery tests use
+isolated queues and temporary accounts. Run `node --env-file=.env.local scripts/check-client-secrets.mjs`
+after a web build to check actual configured private values against the browser assets. No keys are printed.

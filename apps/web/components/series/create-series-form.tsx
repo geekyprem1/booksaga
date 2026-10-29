@@ -87,7 +87,14 @@ export function CreateSeriesForm({
   const [genre, setGenre] = useState(matchedGenre?.id ?? GENRES[0]?.id ?? 'fantasy');
   const [tone, setTone] = useState<string>(TONES[0]);
   const [audience, setAudience] = useState<string>(AUDIENCES[4] ?? 'Adults');
-  const [plannedBooks, setPlannedBooks] = useState(defaults?.plannedBooks ?? 5);
+  const maxPlanned = Math.min(12, maxBooksPerSeries);
+  const defaultPlanned = defaults?.plannedBooks ?? 5;
+  const [plannedBooks, setPlannedBooks] = useState(() =>
+    Math.min(
+      maxPlanned,
+      Math.max(3, Number.isFinite(defaultPlanned) ? Math.trunc(defaultPlanned) : 5),
+    ),
+  );
   const [lengthPreset, setLengthPreset] = useState<LengthPreset>(
     defaults?.lengthPreset && lengthPresets.includes(defaults.lengthPreset)
       ? defaults.lengthPreset
@@ -115,7 +122,6 @@ export function CreateSeriesForm({
 
   const bookCost = costs[lengthPreset] ?? costs.short;
   const canAfford = credits >= bookCost;
-  const maxPlanned = Math.min(12, maxBooksPerSeries);
   const generationTerminal =
     generation?.status === 'completed' ||
     generation?.status === 'failed' ||

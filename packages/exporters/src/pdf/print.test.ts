@@ -1,7 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { buildPrintHtml, insideMarginFor, printGeometry, TRIM_INCHES } from './print';
+import { buildPrintHtml, cssString, insideMarginFor, printGeometry, TRIM_INCHES } from './print';
 
 describe('print layout', () => {
+  it('keeps malicious running heads inside the style element', () => {
+    const payload = '</style><script>globalThis.injected=true</script>"\\\n';
+    const escaped = cssString(payload);
+    expect(escaped).not.toMatch(/[<>\r\n]/);
+    expect(escaped).toContain('\\3C /style\\3E ');
+    const html = buildPrintHtml({
+      title: payload,
+      author: payload,
+      seriesTitle: 'Series',
+      partNumber: 1,
+      trim: '6x9',
+      bleed: false,
+      frontHtml: '',
+      backHtml: '',
+      chapters: [{ number: 3, title: 'Chapter 3: The Iron Chorus', html: '<p>Safe prose.</p>' }],
+    });
+    expect(html.match(/<\/style>/g)).toHaveLength(1);
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('Chapter 3</span>The Iron Chorus');
+    expect(html).not.toContain('Chapter 3: The Iron Chorus');
+  });
+
   it('follows the KDP gutter buckets', () => {
     expect(insideMarginFor(24)).toBe(0.375);
     expect(insideMarginFor(150)).toBe(0.375);

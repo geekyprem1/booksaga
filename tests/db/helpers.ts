@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { createAdminClient, type DbClient } from '@booksaga/core';
 import type { PlanCode } from '@booksaga/shared';
+import { JobRunner, type JobRow } from '../../apps/worker/src/lib/jobs';
 
 // Load .env.local (written by `pnpm env:local`) when running outside the dev server.
 const envFile = resolve(import.meta.dirname, '../../.env.local');
@@ -30,6 +31,10 @@ export const admin: SupabaseClient = createClient(url, serviceKey, noSession);
 
 /** Same, typed with the generated Database types (for the @booksaga/core services). */
 export const db: DbClient = createAdminClient(url, serviceKey);
+
+export function makeRunner(job: JobRow, ownsLock?: () => Promise<boolean>): JobRunner {
+  return new JobRunner(db, job, { url, key: serviceKey, ownsLock });
+}
 
 export function anonClient(): SupabaseClient {
   return createClient(url, anonKey, noSession);

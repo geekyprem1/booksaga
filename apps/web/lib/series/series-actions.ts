@@ -132,7 +132,7 @@ export async function restoreSeriesAction(
   });
 }
 
-/** Duplicate = settings + bible only (PRD §8.5); the books are not copied. */
+/** Copy settings and bible into a new, unwritten roadmap (PRD §8.5). */
 export async function duplicateSeriesAction(
   input: z.infer<typeof idInput>,
 ): Promise<ActionResult<{ seriesId: string }>> {
@@ -141,11 +141,7 @@ export async function duplicateSeriesAction(
     const db = getAdminDb();
     const { seriesId } = idInput.parse(input);
 
-    const { data: series } = await db
-      .from('series')
-      .select('*')
-      .eq('id', seriesId)
-      .maybeSingle();
+    const { data: series } = await db.from('series').select('*').eq('id', seriesId).maybeSingle();
     if (!series) throw new AppError('NOT_FOUND', 'Series not found.');
     if (series.user_id !== user.id) throw new AppError('FORBIDDEN', 'This series is not yours.');
 
@@ -159,6 +155,11 @@ export async function duplicateSeriesAction(
       .neq('status', 'archived');
     assertCan(account.entitlements, { kind: 'createSeries', activeSeriesCount: count ?? 0 });
 
+    const plannedBooks = Math.min(series.planned_books, account.entitlements.maxBooksPerSeries);
+    const arc = series.arc as {
+      overview?: string;
+      books?: { partNumber: number; title?: string; premise?: string }[];
+    } | null;
     const { data: created, error } = await db
       .from('series')
       .insert({
@@ -170,10 +171,12 @@ export async function duplicateSeriesAction(
         tone: series.tone,
         audience: series.audience,
         pen_name: series.pen_name,
-        planned_books: series.planned_books,
+        planned_books: plannedBooks,
         settings: series.settings,
         cover_style: series.cover_style,
-        arc: series.arc,
+        arc: arc
+          ? { ...arc, books: (arc.books ?? []).filter((book) => book.partNumber <= plannedBooks) }
+          : null,
         status: 'draft',
       })
       .select('id')
@@ -182,25 +185,53 @@ export async function duplicateSeriesAction(
       throw new AppError('INTERNAL', `Could not duplicate the series: ${error?.message}`);
     }
 
-    const { data: bible } = await db
-      .from('series_bible')
-      .select('data, version')
-      .eq('series_id', series.id)
-      .maybeSingle();
+    try {
+      const { error: booksError } = await db.from('books').insert(
+        Array.from({ length: plannedBooks }, (_, index) => {
+          const partNumber = index + 1;
+          const planned = arc?.books?.find((book) => book.partNumber === partNumber);
+          return {
+            series_id: created.id,
+            part_number: partNumber,
+            title: planned?.title ?? '',
+            premise: planned?.premise ?? series.idea.slice(0, 1000),
+            length_preset: account.entitlements.lengthPresets[0] ?? 'short',
+            status: partNumber === 1 ? 'ready' : 'locked',
+          };
+        }),
+      );
+      if (booksError) throw new Error(booksError.message);
 
-    if (bible) {
-      await db.from('series_bible').insert({
-        series_id: created.id,
-        data: bible.data,
-        version: bible.version,
-      });
-      await db.from('bible_versions').insert({
-        series_id: created.id,
-        version: bible.version,
-        data: bible.data,
-        source: 'user',
-        diff: { added: [], updated: [], conflicts: [] },
-      });
+      const { data: bible, error: bibleReadError } = await db
+        .from('series_bible')
+        .select('data, version')
+        .eq('series_id', series.id)
+        .maybeSingle();
+      if (bibleReadError) throw new Error(bibleReadError.message);
+
+      if (bible) {
+        const { error: bibleError } = await db.from('series_bible').insert({
+          series_id: created.id,
+          data: bible.data,
+          version: bible.version,
+        });
+        if (bibleError) throw new Error(bibleError.message);
+        const { error: versionError } = await db.from('bible_versions').insert({
+          series_id: created.id,
+          version: bible.version,
+          data: bible.data,
+          source: 'user',
+          diff: { added: [], updated: [], conflicts: [] },
+        });
+        if (versionError) throw new Error(versionError.message);
+      }
+    } catch (err) {
+      // Never leave a half-created copy without its first writable part.
+      await db.from('series').delete().eq('id', created.id);
+      throw new AppError(
+        'INTERNAL',
+        `Could not duplicate the series: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      );
     }
 
     revalidatePath('/my-series');

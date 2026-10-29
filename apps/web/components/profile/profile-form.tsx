@@ -6,12 +6,11 @@ import { Loader2, Plus, Trash2, Upload } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
-import { getBrowserClient } from '@/lib/supabase/client';
 import {
   changePasswordAction,
   createPenNameAction,
   deletePenNameAction,
-  setAvatarAction,
+  uploadAvatarAction,
   updateNameAction,
 } from '@/lib/profile/actions';
 import { initials } from '@/lib/utils';
@@ -22,7 +21,6 @@ export interface PenName {
 }
 
 export function ProfileForm({
-  userId,
   name,
   email,
   avatarUrl,
@@ -65,20 +63,9 @@ export function ProfileForm({
     setUploading(true);
     setAvatarMessage(null);
 
-    const extension = file.name.split('.').pop()?.toLowerCase() ?? 'png';
-    const path = `${userId}/avatar-${Date.now()}.${extension}`;
-    const supabase = getBrowserClient();
-
-    const { error } = await supabase.storage
-      .from('avatars')
-      .upload(path, file, { upsert: true, contentType: file.type });
-    if (error) {
-      setUploading(false);
-      setAvatarMessage(`Upload failed: ${error.message}`);
-      return;
-    }
-
-    const saved = await setAvatarAction({ path });
+    const form = new FormData();
+    form.set('file', file);
+    const saved = await uploadAvatarAction(form);
     setUploading(false);
     if (!saved.ok) {
       setAvatarMessage(saved.error.message);
@@ -125,7 +112,9 @@ export function ProfileForm({
       <Card>
         <CardHeader>
           <CardTitle>Profile</CardTitle>
-          <CardDescription>Your name appears on notifications and in the admin panel.</CardDescription>
+          <CardDescription>
+            Your name appears on notifications and in the admin panel.
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <div className="flex items-center gap-3">
@@ -156,9 +145,7 @@ export function ProfileForm({
               />
             </label>
           </div>
-          {avatarMessage ? (
-            <p className="text-xs text-muted-foreground">{avatarMessage}</p>
-          ) : null}
+          {avatarMessage ? <p className="text-xs text-muted-foreground">{avatarMessage}</p> : null}
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="p-name">Name</Label>
@@ -175,7 +162,8 @@ export function ProfileForm({
 
           <div className="flex items-center gap-3">
             <Button type="button" size="sm" onClick={saveName} disabled={savingName}>
-              {savingName ? <Loader2 className="animate-spin" aria-hidden="true" /> : null} Save name
+              {savingName ? <Loader2 className="animate-spin" aria-hidden="true" /> : null} Save
+              name
             </Button>
             {nameMessage ? <p className="text-xs text-muted-foreground">{nameMessage}</p> : null}
           </div>

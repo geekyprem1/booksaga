@@ -1,0 +1,97 @@
+name: booksaga
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+
+services:
+  redis:
+    image: redis:7-alpine
+    command:
+      [
+        'redis-server',
+        '--appendonly',
+        'yes',
+        '--maxmemory',
+        '2gb',
+        '--maxmemory-policy',
+        'noeviction',
+      ]
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks: [backend]
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging: *logging
+
+  web:
+    image: booksaga-web:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.web
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?Set NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?Set NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    env_file: ${BOOKSAGA_ENV_FILE:-../.env.production}
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      HOSTNAME: 0.0.0.0
+      PORT: '3000'
+    restart: unless-stopped
+    depends_on:
+      redis: { condition: service_healthy }
+    networks: [backend, edge]
+    logging: *logging
+
+  worker:
+    image: booksaga-worker:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    env_file: ${BOOKSAGA_ENV_FILE:-../.env.production}
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      WORKER_HEALTH_PORT: '3001'
+    init: true
+    shm_size: 1gb
+    stop_grace_period: 10m
+    restart: unless-stopped
+    depends_on:
+      redis: { condition: service_healthy }
+    networks: [backend]
+    logging: *logging
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      APP_URL: ${APP_URL:?Set APP_URL}
+    ports:
+      - '${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-80}:80'
+      - '${HTTPS_BIND:-0.0.0.0}:443:443'
+      - '${HTTPS_BIND:-0.0.0.0}:443:443/udp'
+    volumes:
+      - ${CADDYFILE:-./Caddyfile}:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    depends_on:
+      web: { condition: service_healthy }
+    networks: [edge]
+    logging: *logging
+
+networks:
+  backend:
+  edge:
+
+volumes:
+  redis_data:
+  caddy_data:
+  caddy_config:

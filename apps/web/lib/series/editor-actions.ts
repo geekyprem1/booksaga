@@ -111,20 +111,23 @@ export async function reorderChaptersAction(
     const db = getAdminDb();
     await assertBookOwner(db, data.bookId, user);
 
-    const { data: chapters } = await db
-      .from('chapters')
-      .select('id')
-      .eq('book_id', data.bookId);
+    const { data: chapters } = await db.from('chapters').select('id').eq('book_id', data.bookId);
     const known = new Set((chapters ?? []).map((c) => c.id));
     if (data.orderedIds.length !== known.size || data.orderedIds.some((id) => !known.has(id))) {
       throw new AppError('VALIDATION', 'The chapter list changed. Refresh and try again.');
     }
 
     for (const [index, id] of data.orderedIds.entries()) {
-      await db.from('chapters').update({ number: -(index + 1) }).eq('id', id);
+      await db
+        .from('chapters')
+        .update({ number: -(index + 1) })
+        .eq('id', id);
     }
     for (const [index, id] of data.orderedIds.entries()) {
-      await db.from('chapters').update({ number: index + 1 }).eq('id', id);
+      await db
+        .from('chapters')
+        .update({ number: index + 1 })
+        .eq('id', id);
     }
 
     revalidatePath(`/series/${data.bookId}`);
@@ -164,7 +167,8 @@ export async function addChapterAction(input: {
       })
       .select('id')
       .single();
-    if (error || !data) throw new AppError('INTERNAL', `Could not add a chapter: ${error?.message}`);
+    if (error || !data)
+      throw new AppError('INTERNAL', `Could not add a chapter: ${error?.message}`);
 
     revalidatePath(`/series/${input.bookId}`);
     return { chapterId: data.id, number };
@@ -195,10 +199,16 @@ export async function deleteChapterAction(input: {
       .eq('book_id', chapter.book_id)
       .order('number');
     for (const [index, row] of (rest ?? []).entries()) {
-      await db.from('chapters').update({ number: -(index + 1) }).eq('id', row.id);
+      await db
+        .from('chapters')
+        .update({ number: -(index + 1) })
+        .eq('id', row.id);
     }
     for (const [index, row] of (rest ?? []).entries()) {
-      await db.from('chapters').update({ number: index + 1 }).eq('id', row.id);
+      await db
+        .from('chapters')
+        .update({ number: index + 1 })
+        .eq('id', row.id);
     }
 
     revalidatePath(`/series/${chapter.book_id}`);
@@ -216,25 +226,28 @@ export interface ChapterVersion {
 export async function listVersionsAction(input: {
   chapterId: string;
 }): Promise<ActionResult<ChapterVersion[]>> {
-  return runAction(async () => {
-    const user = await requireUser();
-    const db = getAdminDb();
-    await assertChapterOwner(db, input.chapterId, user);
+  return runAction(
+    async () => {
+      const user = await requireUser();
+      const db = getAdminDb();
+      await assertChapterOwner(db, input.chapterId, user);
 
-    const { data } = await db
-      .from('chapter_versions')
-      .select('id, source, content_text, created_at')
-      .eq('chapter_id', input.chapterId)
-      .order('created_at', { ascending: false })
-      .limit(20);
+      const { data } = await db
+        .from('chapter_versions')
+        .select('id, source, content_text, created_at')
+        .eq('chapter_id', input.chapterId)
+        .order('created_at', { ascending: false })
+        .limit(20);
 
-    return (data ?? []).map((v) => ({
-      id: v.id,
-      source: v.source as ChapterVersion['source'],
-      createdAt: v.created_at,
-      wordCount: countWords(v.content_text),
-    }));
-  });
+      return (data ?? []).map((v) => ({
+        id: v.id,
+        source: v.source as ChapterVersion['source'],
+        createdAt: v.created_at,
+        wordCount: countWords(v.content_text),
+      }));
+    },
+    { readOnly: true },
+  );
 }
 
 export async function restoreVersionAction(input: {
@@ -299,7 +312,10 @@ export async function rewriteChapterAction(
 
     const action = 'rewrite' as const;
     const cost = await getCreditCost(action);
-    const source = resolveCreditSource({ id: user.id, parentAgencyId: user.parentAgencyId }, action);
+    const source = resolveCreditSource(
+      { id: user.id, parentAgencyId: user.parentAgencyId },
+      action,
+    );
 
     const queued = await enqueueJob(db, getQueues(), {
       type: 'rewrite',
@@ -403,7 +419,10 @@ export async function regenerateMetadataAction(input: {
 
     const action = 'metadata' as const;
     const cost = await getCreditCost(action);
-    const source = resolveCreditSource({ id: user.id, parentAgencyId: user.parentAgencyId }, action);
+    const source = resolveCreditSource(
+      { id: user.id, parentAgencyId: user.parentAgencyId },
+      action,
+    );
 
     const queued = await enqueueJob(db, getQueues(), {
       type: 'metadata',

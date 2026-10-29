@@ -16,6 +16,7 @@ import { Queue, type ConnectionOptions } from 'bullmq';
 import { AppError, type CreditAction, type CreditSource } from '@booksaga/shared';
 import { mapCreditError, refundCredits, reserveCredits } from './credits';
 import type { Database, DbClient } from './db';
+import { checkRateLimit } from './rate-limit';
 
 /** Shape of the `jobs.meta` column. */
 type JobMeta = Database['public']['Tables']['jobs']['Insert']['meta'];
@@ -111,11 +112,15 @@ export function redisConnectionOptions(redisUrl: string): ConnectionOptions {
 
 export type Queues = Record<QueueName, Queue>;
 
-export function createQueues(connection: ConnectionOptions): Queues {
+export function createQueues(
+  connection: ConnectionOptions,
+  options: { prefix?: string } = {},
+): Queues {
   const queues = {} as Queues;
   for (const name of QUEUE_NAMES) {
     queues[name] = new Queue(name, {
       connection,
+      ...options,
       defaultJobOptions: {
         removeOnComplete: { age: 24 * 3600, count: 1000 },
         removeOnFail: { age: 7 * 24 * 3600 },
@@ -144,6 +149,8 @@ export interface EnqueueJobInput {
   action?: CreditAction;
   amount: number;
   version?: number;
+  /** Use a stable, one-shot key for an administrative retry of a particular job. */
+  retryOfJobId?: string;
   payload?: Record<string, unknown>;
   reason?: string;
   /** Free jobs (re-compose, cleanup) skip the credit reservation entirely. */
@@ -193,11 +200,14 @@ export async function enqueueJob(
   queues: Queues,
   input: EnqueueJobInput,
 ): Promise<EnqueueJobResult> {
+  await checkRateLimit(queues, 'jobs', input.userId, 30, 60_000);
   if (input.type === 'book' && input.dailyBookCap !== undefined) {
     await assertUnderDailyBookCap(db, input.userId, input.dailyBookCap);
   }
 
-  const baseKey = idempotencyKey(input.type, input.refId, input.userId, input.version ?? 1);
+  const baseKey = input.retryOfJobId
+    ? `admin-retry-${input.retryOfJobId}`
+    : idempotencyKey(input.type, input.refId, input.userId, input.version ?? 1);
   let key = baseKey;
   let jobId: string | null = null;
 
@@ -246,7 +256,7 @@ export async function enqueueJob(
           existing.data.status === 'failed' ||
           existing.data.status === 'cancelled';
 
-        if (!finished) {
+        if (!finished || input.retryOfJobId) {
           return { jobId: existing.data.id, deduplicated: true, ledgerId: existing.data.ledger_id };
         }
 
@@ -279,6 +289,26 @@ export async function enqueueJob(
     }
   }
 
+  if (ledgerId) {
+    const linked = await db.from('jobs').update({ ledger_id: ledgerId }).eq('id', jobId);
+    if (linked.error) {
+      try {
+        await refundCredits(db, ledgerId, 'Could not attach reservation');
+      } finally {
+        await db
+          .from('jobs')
+          .update({
+            status: 'cancelled',
+            ledger_id: ledgerId,
+            error: 'Could not attach credit reservation; review ledger.',
+            finished_at: new Date().toISOString(),
+          })
+          .eq('id', jobId);
+      }
+      throw new Error(`Failed to attach credit reservation: ${linked.error.message}`);
+    }
+  }
+
   try {
     await queues[queueForJob(input.type)].add(
       input.type,
@@ -298,23 +328,34 @@ export async function enqueueJob(
     );
   } catch (err) {
     // The job never reached the queue: give the credits back and close the row.
-    if (ledgerId) await refundCredits(db, ledgerId, 'Queue unavailable').catch(() => undefined);
+    let refunded = !ledgerId;
+    if (ledgerId) {
+      try {
+        const status = await refundCredits(db, ledgerId, 'Queue unavailable');
+        refunded = status === 'refunded' || status === 'already_refunded';
+      } catch (refundError) {
+        console.error('[queue] refund failed', refundError);
+      }
+    }
     await db
       .from('jobs')
       .update({
         status: 'cancelled',
-        error: 'The job queue was unavailable. Your credits were refunded.',
+        error: refunded
+          ? 'The job queue was unavailable. Your credits were refunded.'
+          : 'The job queue was unavailable. Credit refund is pending; contact support.',
         finished_at: new Date().toISOString(),
         ledger_id: ledgerId,
       })
       .eq('id', jobId);
     throw new AppError(
       'QUEUE_UNAVAILABLE',
-      'The generation queue is unavailable right now. Your credits were refunded — please try again.',
+      refunded
+        ? 'The generation queue is unavailable right now. Your credits were refunded — please try again.'
+        : 'The generation queue is unavailable and the credit refund is pending. Please contact support.',
       { cause: err instanceof Error ? err.message : String(err) },
     );
   }
 
-  await db.from('jobs').update({ ledger_id: ledgerId }).eq('id', jobId);
   return { jobId, deduplicated: false, ledgerId };
 }

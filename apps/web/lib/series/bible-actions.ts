@@ -43,10 +43,7 @@ export async function saveBibleAction(
 
     await db
       .from('series_bible')
-      .upsert(
-        { series_id: data.seriesId, data: data.data, version },
-        { onConflict: 'series_id' },
-      );
+      .upsert({ series_id: data.seriesId, data: data.data, version }, { onConflict: 'series_id' });
     await db.from('bible_versions').insert({
       series_id: data.seriesId,
       version,
@@ -118,31 +115,38 @@ export interface BibleVersionRow {
 export async function listBibleVersionsAction(input: {
   seriesId: string;
 }): Promise<ActionResult<BibleVersionRow[]>> {
-  return runAction(async () => {
-    const user = await requireUser();
-    const db = getAdminDb();
-    await assertSeriesOwner(db, input.seriesId, user.id, user.role);
+  return runAction(
+    async () => {
+      const user = await requireUser();
+      const db = getAdminDb();
+      await assertSeriesOwner(db, input.seriesId, user.id, user.role);
 
-    const { data } = await db
-      .from('bible_versions')
-      .select('id, version, source, created_at, diff')
-      .eq('series_id', input.seriesId)
-      .order('version', { ascending: false })
-      .limit(30);
+      const { data } = await db
+        .from('bible_versions')
+        .select('id, version, source, created_at, diff')
+        .eq('series_id', input.seriesId)
+        .order('version', { ascending: false })
+        .limit(30);
 
-    return (data ?? []).map((row) => {
-      const diff = (row.diff ?? {}) as { added?: unknown[]; updated?: unknown[]; conflicts?: unknown[] };
-      return {
-        id: row.id,
-        version: row.version,
-        source: row.source as 'ai' | 'user',
-        createdAt: row.created_at,
-        added: diff.added?.length ?? 0,
-        updated: diff.updated?.length ?? 0,
-        conflicts: diff.conflicts?.length ?? 0,
-      };
-    });
-  });
+      return (data ?? []).map((row) => {
+        const diff = (row.diff ?? {}) as {
+          added?: unknown[];
+          updated?: unknown[];
+          conflicts?: unknown[];
+        };
+        return {
+          id: row.id,
+          version: row.version,
+          source: row.source as 'ai' | 'user',
+          createdAt: row.created_at,
+          added: diff.added?.length ?? 0,
+          updated: diff.updated?.length ?? 0,
+          conflicts: diff.conflicts?.length ?? 0,
+        };
+      });
+    },
+    { readOnly: true },
+  );
 }
 
 async function assertSeriesOwner(

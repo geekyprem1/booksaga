@@ -33,7 +33,7 @@ test.describe('authentication', () => {
   test('a malicious next parameter cannot redirect off-site', async ({ page }) => {
     const user = await createAccount({ plans: ['fe'] });
     await login(page, user, '//evil.example.com');
-    await expect(page).toHaveURL(/localhost:3000\/dashboard$/);
+    await expect(page).toHaveURL(`${process.env.APP_URL ?? 'http://localhost:3000'}/dashboard`);
   });
 
   test('sign out ends the session', async ({ page }) => {

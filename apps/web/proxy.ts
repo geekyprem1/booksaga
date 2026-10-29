@@ -15,7 +15,37 @@ const PUBLIC_PATHS = [
 ];
 
 export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  const supabaseUrl = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!);
+  const realtimeUrl = `${supabaseUrl.protocol === 'https:' ? 'wss:' : 'ws:'}//${supabaseUrl.host}`;
+  const development = process.env.NODE_ENV !== 'production';
+  const csp = [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${development ? " 'unsafe-eval'" : ''}`,
+    "style-src 'self' 'unsafe-inline'",
+    `connect-src 'self' ${supabaseUrl.origin} ${realtimeUrl}${development ? ' ws: wss:' : ''}`,
+    `img-src 'self' data: blob: https: ${supabaseUrl.origin}`,
+    "font-src 'self' data:",
+    `media-src 'self' blob: ${supabaseUrl.origin}`,
+    "worker-src 'self' blob:",
+    `frame-src 'self' blob: ${supabaseUrl.origin} https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com`,
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    ...(process.env.APP_URL?.startsWith('https://') ? ['upgrade-insecure-requests'] : []),
+  ].join('; ');
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-nonce', nonce);
+  requestHeaders.set('Content-Security-Policy', csp);
+  const next = () => {
+    const result = NextResponse.next({ request: { headers: requestHeaders } });
+    result.headers.set('Content-Security-Policy', csp);
+    if (process.env.APP_URL?.startsWith('https://'))
+      result.headers.set('Strict-Transport-Security', 'max-age=31536000');
+    return result;
+  };
+  let response = next();
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,7 +55,8 @@ export async function proxy(request: NextRequest) {
         getAll: () => request.cookies.getAll(),
         setAll(list) {
           for (const { name, value } of list) request.cookies.set(name, value);
-          response = NextResponse.next({ request });
+          requestHeaders.set('cookie', request.cookies.toString());
+          response = next();
           for (const { name, value, options } of list) response.cookies.set(name, value, options);
         },
       },
@@ -42,6 +73,9 @@ export async function proxy(request: NextRequest) {
 
   const redirectTo = (url: URL) => {
     const redirect = NextResponse.redirect(url);
+    redirect.headers.set('Content-Security-Policy', csp);
+    if (process.env.APP_URL?.startsWith('https://'))
+      redirect.headers.set('Strict-Transport-Security', 'max-age=31536000');
     // Carry over refreshed session cookies.
     for (const cookie of response.cookies.getAll()) redirect.cookies.set(cookie);
     return redirect;

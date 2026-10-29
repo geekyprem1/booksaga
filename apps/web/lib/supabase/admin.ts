@@ -1,6 +1,7 @@
 import 'server-only';
 import { createAdminClient, type DbClient } from '@booksaga/core';
 import { getServerEnv } from '@booksaga/shared';
+import { assertWritable } from '@/lib/auth/view-as';
 
 let client: DbClient | undefined;
 
@@ -11,7 +12,17 @@ let client: DbClient | undefined;
 export function getAdminDb(): DbClient {
   if (!client) {
     const env = getServerEnv();
-    client = createAdminClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+    client = createAdminClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+      fetch: async (input, init) => {
+        const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+        const url = new URL(input instanceof Request ? input.url : String(input));
+        const signsReadOnlyUrl =
+          method.toUpperCase() === 'POST' && url.pathname.startsWith('/storage/v1/object/sign/');
+        if (!['GET', 'HEAD'].includes(method.toUpperCase()) && !signsReadOnlyUrl)
+          await assertWritable();
+        return fetch(input, init);
+      },
+    });
   }
   return client;
 }

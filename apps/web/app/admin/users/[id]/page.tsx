@@ -23,6 +23,8 @@ import { requireAdmin } from '@/lib/auth/session';
 import { getAdminDb } from '@/lib/supabase/admin';
 import { formatNumber } from '@/lib/utils';
 import { z } from 'zod';
+import { startViewAsAction } from '../view-as-actions';
+import { Button } from '@/components/ui/button';
 
 export const metadata = { title: 'User · Admin' };
 export const dynamic = 'force-dynamic';
@@ -95,6 +97,14 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
       </div>
 
       <div className="flex flex-wrap gap-2">
+        {profile.role !== 'admin' && profile.status === 'active' ? (
+          <form action={startViewAsAction}>
+            <input type="hidden" name="userId" value={id} />
+            <Button type="submit" variant="secondary" className="min-h-11">
+              View as user (read-only)
+            </Button>
+          </form>
+        ) : null}
         <StatusToggle
           userId={id}
           status={profile.status === 'suspended' ? 'suspended' : 'active'}

@@ -1,0 +1,18 @@
+{
+  "date": "2026-10-29T04:36:17.025Z",
+  "mode": "mock",
+  "jobs": 200,
+  "concurrency": 50,
+  "artificialLatencyMs": 100,
+  "queueDrainMs": 85885,
+  "jobsPerMinute": 139.72,
+  "completed": 200,
+  "generatedBooks": 200,
+  "reservations": 200,
+  "committed": 200,
+  "remainingReservations": 0,
+  "reservedAmount": 2000,
+  "balanceTotal": 58000,
+  "expectedBalanceTotal": 58000,
+  "passed": true
+}

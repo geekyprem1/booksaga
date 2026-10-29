@@ -189,34 +189,37 @@ export async function suggestIdeasAction(
 
 /** Polling fallback for the live-progress modal (Realtime is the fast path). */
 export async function getJobAction(jobId: string): Promise<ActionResult<JobSnapshot>> {
-  return runAction(async () => {
-    const user = await requireUser();
-    const { data, error } = await getAdminDb()
-      .from('jobs')
-      .select(
-        'id, user_id, type, created_at, started_at, heartbeat_at, status, progress, step_label, error, ref_id, meta',
-      )
-      .eq('id', jobId)
-      .maybeSingle();
+  return runAction(
+    async () => {
+      const user = await requireUser();
+      const { data, error } = await getAdminDb()
+        .from('jobs')
+        .select(
+          'id, user_id, type, created_at, started_at, heartbeat_at, status, progress, step_label, error, ref_id, meta',
+        )
+        .eq('id', jobId)
+        .maybeSingle();
 
-    if (error) throw new AppError('INTERNAL', `Could not load the job: ${error.message}`);
-    if (!data) throw new AppError('NOT_FOUND', 'Job not found.');
-    if (data.user_id !== user.id && user.role !== 'admin') {
-      throw new AppError('FORBIDDEN', 'You cannot see this job.');
-    }
+      if (error) throw new AppError('INTERNAL', `Could not load the job: ${error.message}`);
+      if (!data) throw new AppError('NOT_FOUND', 'Job not found.');
+      if (data.user_id !== user.id && user.role !== 'admin') {
+        throw new AppError('FORBIDDEN', 'You cannot see this job.');
+      }
 
-    return {
-      id: data.id,
-      type: data.type,
-      createdAt: data.created_at,
-      startedAt: data.started_at,
-      heartbeatAt: data.heartbeat_at,
-      status: data.status as JobSnapshot['status'],
-      progress: data.progress,
-      stepLabel: data.step_label,
-      error: data.error,
-      refId: data.ref_id,
-      meta: (data.meta ?? {}) as Record<string, unknown>,
-    };
-  });
+      return {
+        id: data.id,
+        type: data.type,
+        createdAt: data.created_at,
+        startedAt: data.started_at,
+        heartbeatAt: data.heartbeat_at,
+        status: data.status as JobSnapshot['status'],
+        progress: data.progress,
+        stepLabel: data.step_label,
+        error: data.error,
+        refId: data.ref_id,
+        meta: (data.meta ?? {}) as Record<string, unknown>,
+      };
+    },
+    { readOnly: true },
+  );
 }

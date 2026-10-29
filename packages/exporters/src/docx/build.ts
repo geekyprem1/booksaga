@@ -2,16 +2,8 @@
  * DOCX export (T5.5): manuscript-style file with a title page, copyright, contents and one
  * heading per chapter, ready for editors or KDP's paperback manuscript route.
  */
-import {
-  AlignmentType,
-  Document,
-  HeadingLevel,
-  PageBreak,
-  Packer,
-  Paragraph,
-  TextRun,
-} from 'docx';
-import type { ExportChapter } from '../html/render';
+import { AlignmentType, Document, HeadingLevel, PageBreak, Packer, Paragraph, TextRun } from 'docx';
+import { displayTitle, type ExportChapter } from '../html/render';
 
 export interface DocxInput {
   title: string;
@@ -57,7 +49,9 @@ export async function buildDocx(input: DocxInput): Promise<Buffer> {
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { before: 2400, after: 240 },
-      children: [new TextRun({ text: input.seriesTitle.toUpperCase(), size: 20, characterSpacing: 60 })],
+      children: [
+        new TextRun({ text: input.seriesTitle.toUpperCase(), size: 20, characterSpacing: 60 }),
+      ],
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
@@ -101,7 +95,9 @@ export async function buildDocx(input: DocxInput): Promise<Buffer> {
     ...input.chapters.map(
       (chapter) =>
         new Paragraph({
-          children: [new TextRun({ text: `Chapter ${chapter.number} · ${chapter.title}` })],
+          children: [
+            new TextRun({ text: `Chapter ${chapter.number} · ${displayTitle(chapter.title)}` }),
+          ],
           spacing: { after: 80 },
         }),
     ),
@@ -117,7 +113,7 @@ export async function buildDocx(input: DocxInput): Promise<Buffer> {
       }),
       new Paragraph({
         heading: HeadingLevel.HEADING_2,
-        children: [new TextRun({ text: chapter.title })],
+        children: [new TextRun({ text: displayTitle(chapter.title) })],
         spacing: { after: 240 },
       }),
       ...proseParagraphs(chapter.text),

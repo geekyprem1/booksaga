@@ -58,6 +58,7 @@ export function resolveEntitlements(
   plans: readonly PlanCode[],
   ctx: ResolveContext = {},
   overrides: Partial<Entitlements> = {},
+  planLimits: Partial<Record<PlanCode, Partial<PlanLimits>>> = {},
 ): Entitlements {
   const active: PlanCode[] = ctx.isResellerCustomer ? ['fe'] : [...new Set(plans)];
   if (active.length === 0) return { ...NO_ENTITLEMENTS, ...overrides };
@@ -70,7 +71,7 @@ export function resolveEntitlements(
   let seriesCap: number | null | undefined;
 
   for (const code of codes) {
-    const l = PLANS[code].limits;
+    const l = planLimits[code] ?? PLANS[code].limits;
     if (l.maxSeries !== undefined) {
       seriesCap = seriesCap === undefined ? l.maxSeries : maxNullable(seriesCap, l.maxSeries);
     }
@@ -185,7 +186,9 @@ export function assertCan(ent: Entitlements, check: CapabilityCheck): void {
 export function can(ent: Entitlements, check: CapabilityCheck): boolean {
   switch (check.kind) {
     case 'createSeries':
-      return ent.maxSeries !== 0 && (ent.maxSeries === null || check.activeSeriesCount < ent.maxSeries);
+      return (
+        ent.maxSeries !== 0 && (ent.maxSeries === null || check.activeSeriesCount < ent.maxSeries)
+      );
     case 'addBook':
       return check.booksInSeries < ent.maxBooksPerSeries;
     case 'generateBook':

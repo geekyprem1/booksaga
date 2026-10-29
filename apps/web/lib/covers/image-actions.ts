@@ -9,11 +9,9 @@ import { requireUser } from '@/lib/auth/session';
 import { getQueues } from '@/lib/queue';
 import { getAdminDb } from '@/lib/supabase/admin';
 import { runAction, type ActionResult } from '@/lib/actions';
-import { sniffImage } from './sniff';
+import { normalizeImage } from './normalize-image';
 
 const MAX_BYTES = 10 * 1024 * 1024;
-
-
 
 /** Upload an image to the user's library (T4.7). */
 export async function uploadImageAction(
@@ -26,19 +24,15 @@ export async function uploadImageAction(
     if (file.size === 0) throw new AppError('VALIDATION', 'The file is empty.');
     if (file.size > MAX_BYTES) throw new AppError('VALIDATION', 'Images must be 10 MB or smaller.');
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const sniffed = sniffImage(buffer);
-    if (!sniffed) {
-      throw new AppError('VALIDATION', 'Upload a PNG, JPEG or WebP image.');
-    }
+    const buffer = await normalizeImage(Buffer.from(await file.arrayBuffer()));
 
     const id = randomUUID();
-    const path = `${user.id}/images/${id}.${sniffed.ext}`;
+    const path = `${user.id}/images/${id}.webp`;
     const db = getAdminDb();
 
     const upload = await db.storage
       .from('uploads')
-      .upload(path, buffer, { contentType: sniffed.mime, upsert: false });
+      .upload(path, buffer, { contentType: 'image/webp', upsert: false });
     if (upload.error) {
       throw new AppError('INTERNAL', `Could not store the image: ${upload.error.message}`);
     }
@@ -72,7 +66,7 @@ export async function applyLibraryImageAction(
 
     const { data: book } = await db
       .from('books')
-      .select('id, series_id')
+      .select('id, series_id, status')
       .eq('id', bookId)
       .maybeSingle();
     if (!book) throw new AppError('NOT_FOUND', 'Book not found.');
@@ -84,6 +78,9 @@ export async function applyLibraryImageAction(
       .maybeSingle();
     if (!series || series.user_id !== user.id) {
       throw new AppError('FORBIDDEN', 'This book is not yours.');
+    }
+    if (book.status === 'locked') {
+      throw new AppError('PART_LOCKED', 'Write this part before generating a cover.');
     }
 
     const { data: image } = await db

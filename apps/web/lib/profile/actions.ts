@@ -1,6 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { randomUUID } from 'node:crypto';
+import { normalizeImage } from '@/lib/covers/normalize-image';
 import { z } from 'zod';
 import { AppError } from '@booksaga/shared';
 import { requireUser } from '@/lib/auth/session';
@@ -17,10 +19,7 @@ export async function updateNameAction(
     const user = await requireUser();
     const { name } = nameInput.parse(input);
 
-    const { error } = await getAdminDb()
-      .from('profiles')
-      .update({ name })
-      .eq('id', user.id);
+    const { error } = await getAdminDb().from('profiles').update({ name }).eq('id', user.id);
     if (error) throw new AppError('INTERNAL', `Could not save your name: ${error.message}`);
 
     revalidatePath('/profile');
@@ -28,25 +27,25 @@ export async function updateNameAction(
   });
 }
 
-const avatarInput = z.object({ path: z.string().min(1).max(300) });
-
-/** Called after the browser uploaded the file to `avatars/{userId}/…` (RLS enforces the folder). */
-export async function setAvatarAction(
-  input: z.infer<typeof avatarInput>,
-): Promise<ActionResult<{ path: string }>> {
+export async function uploadAvatarAction(form: FormData): Promise<ActionResult<{ path: string }>> {
   return runAction(async () => {
     const user = await requireUser();
-    const { path } = avatarInput.parse(input);
-    if (!path.startsWith(`${user.id}/`)) {
-      throw new AppError('FORBIDDEN', 'That file does not belong to you.');
+    const file = form.get('file');
+    if (!(file instanceof File) || !file.size || file.size > 2 * 1024 * 1024) {
+      throw new AppError('VALIDATION', 'Upload a PNG, JPEG or WebP image up to 2 MB.');
     }
-
-    const { error } = await getAdminDb()
-      .from('profiles')
-      .update({ avatar_url: path })
-      .eq('id', user.id);
-    if (error) throw new AppError('INTERNAL', `Could not save the avatar: ${error.message}`);
-
+    const buffer = await normalizeImage(Buffer.from(await file.arrayBuffer()), 512);
+    const path = `${user.id}/avatar-${randomUUID()}.webp`;
+    const db = getAdminDb();
+    const upload = await db.storage
+      .from('avatars')
+      .upload(path, buffer, { contentType: 'image/webp', upsert: false });
+    if (upload.error) throw new AppError('INTERNAL', 'Could not upload the avatar.');
+    const saved = await db.from('profiles').update({ avatar_url: path }).eq('id', user.id);
+    if (saved.error) {
+      await db.storage.from('avatars').remove([path]);
+      throw new AppError('INTERNAL', 'Could not save the avatar.');
+    }
     revalidatePath('/profile');
     return { path };
   });
@@ -100,7 +99,9 @@ export async function createPenNameAction(
     if (error || !created) {
       throw new AppError(
         error?.code === '23505' ? 'CONFLICT' : 'INTERNAL',
-        error?.code === '23505' ? 'You already have a pen name with that name.' : 'Could not add it.',
+        error?.code === '23505'
+          ? 'You already have a pen name with that name.'
+          : 'Could not add it.',
       );
     }
 
@@ -110,9 +111,7 @@ export async function createPenNameAction(
   });
 }
 
-export async function deletePenNameAction(input: {
-  id: string;
-}): Promise<ActionResult<undefined>> {
+export async function deletePenNameAction(input: { id: string }): Promise<ActionResult<undefined>> {
   return runAction(async () => {
     const user = await requireUser();
     const { error } = await getAdminDb()

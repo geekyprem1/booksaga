@@ -18,6 +18,7 @@ import {
 import { resolveVoice } from '@booksaga/shared';
 import sharp from 'sharp';
 import type { JobRunner } from '../../lib/jobs';
+import { assertWorkerAccess } from '../../lib/entitlements';
 
 export interface AudiobookJobData {
   jobId: string;
@@ -53,7 +54,9 @@ export async function processAudiobook(
     .eq('id', book.series_id)
     .maybeSingle();
   if (!series) throw new Error(`Series ${book.series_id} not found`);
-  if (series.user_id !== data.userId) throw new Error('This book does not belong to the job owner.');
+  if (series.user_id !== data.userId)
+    throw new Error('This book does not belong to the job owner.');
+  await assertWorkerAccess(db, data.userId, { kind: 'audiobook' });
 
   const { data: existing } = await db
     .from('audiobooks')
@@ -72,10 +75,12 @@ export async function processAudiobook(
     .eq('book_id', book.id)
     .order('number');
 
-  const chapters = (chapterRows ?? []).filter((chapter) => (chapter.content_text ?? '').trim().length > 0);
+  const chapters = (chapterRows ?? []).filter(
+    (chapter) => (chapter.content_text ?? '').trim().length > 0,
+  );
   if (chapters.length === 0) throw new Error('This book has no chapter text to narrate.');
 
-  const basePath = `${data.userId}/${book.id}/audio/${data.audiobookId}`;
+  const basePath = `${data.userId}/${book.id}/audio/${data.audiobookId}/${runner.executionToken}`;
   const title = book.title || `Part ${book.part_number}`;
   const author = series.pen_name || 'Unknown Author';
   const narrator = resolveVoice(data.voice);
@@ -140,7 +145,8 @@ export async function processAudiobook(
     const upload = await db.storage
       .from('audio')
       .upload(path, mp3, { contentType: 'audio/mpeg', upsert: true });
-    if (upload.error) throw new Error(`Could not store chapter ${chapter.number}: ${upload.error.message}`);
+    if (upload.error)
+      throw new Error(`Could not store chapter ${chapter.number}: ${upload.error.message}`);
 
     const probe = await probeAudio(mp3);
     const record: ChapterRecord = {
@@ -199,11 +205,13 @@ export async function processAudiobook(
     const name =
       record.number === 0
         ? '00-opening-credits.mp3'
-        : `${String(record.number).padStart(2, '0')}-${record.title
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '')
-            .slice(0, 40) || 'chapter'}.mp3`;
+        : `${String(record.number).padStart(2, '0')}-${
+            record.title
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-+|-+$/g, '')
+              .slice(0, 40) || 'chapter'
+          }.mp3`;
     zipFiles.push({ name, buffer: Buffer.from(await download.data.arrayBuffer()) });
   }
 
@@ -222,7 +230,8 @@ export async function processAudiobook(
   const zipUpload = await db.storage
     .from('exports')
     .upload(zipPath, zip, { contentType: 'application/zip', upsert: true });
-  if (zipUpload.error) throw new Error(`Could not store the audiobook ZIP: ${zipUpload.error.message}`);
+  if (zipUpload.error)
+    throw new Error(`Could not store the audiobook ZIP: ${zipUpload.error.message}`);
 
   const totalSeconds = finished.reduce((sum, record) => sum + record.durationSec, 0);
 

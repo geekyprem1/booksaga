@@ -3,15 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Download, FileArchive, Loader2 } from 'lucide-react';
+import { Download, FileArchive, Loader2, LockKeyhole } from 'lucide-react';
 import { Badge, Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { JobProgressDialog } from '@/components/jobs/job-progress-dialog';
-import {
-  EXPORT_FORMATS,
-  selectedExportFormats,
-  type ExportFormat,
-} from '@/lib/exports/formats';
+import { EXPORT_FORMATS, selectedExportFormats, type ExportFormat } from '@/lib/exports/formats';
 import { exportBookAction } from '@/lib/series/export-actions';
 import { cn } from '@/lib/utils';
 
@@ -30,6 +26,7 @@ export interface ExportRow {
   zipPath: string | null;
   createdAt: string;
   expiresAt: string | null;
+  status: 'ready' | 'expired';
 }
 
 type Format = ExportFormat;
@@ -96,7 +93,10 @@ export function ExportsHub({
   return (
     <div className="flex flex-col gap-5">
       {error ? (
-        <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-rose-200">
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-rose-200"
+        >
           {error}
         </p>
       ) : null}
@@ -153,7 +153,9 @@ export function ExportsHub({
                       )}
                     >
                       {FORMAT_LABELS[format]}
-                      {locked ? ' ðŸ”’' : ''}
+                      {locked ? (
+                        <LockKeyhole className="ml-1 inline size-3" aria-hidden="true" />
+                      ) : null}
                     </button>
                   );
                 })}
@@ -169,7 +171,9 @@ export function ExportsHub({
                 type="button"
                 size="sm"
                 onClick={() => run(book.id)}
-                disabled={busy !== null || book.status !== 'generated' || formatsFor(book.id).length === 0}
+                disabled={
+                  busy !== null || book.status !== 'generated' || formatsFor(book.id).length === 0
+                }
               >
                 {busy === book.id ? (
                   <Loader2 className="animate-spin" aria-hidden="true" />
@@ -204,12 +208,14 @@ export function ExportsHub({
                         dateStyle: 'medium',
                         timeStyle: 'short',
                       })}
-                      {row.expiresAt
+                      {row.status === 'ready' && row.expiresAt
                         ? ` · expires ${new Date(row.expiresAt).toLocaleDateString()}`
                         : ''}
                     </p>
                   </div>
-                  {row.zipPath ? (
+                  {row.status === 'expired' ? (
+                    <Badge variant="muted">Files expired · export again for free</Badge>
+                  ) : row.zipPath ? (
                     <Button asChild size="sm" variant="secondary">
                       <a href={`/api/files/exports/${row.zipPath}`} download>
                         <Download aria-hidden="true" /> Download ZIP

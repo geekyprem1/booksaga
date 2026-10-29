@@ -24,10 +24,11 @@ export interface RetryJobResult {
  * Retry a failed job as the admin. The failed attempt was already refunded when it failed, so the
  * retry runs free (no second charge). The payload is the original one kept in `jobs.meta`.
  *
- * A book retry puts the book back to `ready` before the job is queued; the worker resumes from the
- * chapters already written, so finished chapters are not paid for again.
+ * The worker resumes books from chapters already written.
  */
-export async function retryJobAction(raw: z.input<typeof input>): Promise<ActionResult<RetryJobResult>> {
+export async function retryJobAction(
+  raw: z.input<typeof input>,
+): Promise<ActionResult<RetryJobResult>> {
   return runAction(async () => {
     const admin = await requireAdmin();
     const { jobId } = input.parse(raw);
@@ -35,7 +36,7 @@ export async function retryJobAction(raw: z.input<typeof input>): Promise<Action
 
     const { data: job } = await db
       .from('jobs')
-      .select('id, user_id, type, status, ref_id, meta')
+      .select('id, user_id, type, status, ref_id, meta, ledger_id, credits_reserved')
       .eq('id', jobId)
       .maybeSingle();
     if (!job) throw new AppError('NOT_FOUND', 'Job not found.');
@@ -46,36 +47,39 @@ export async function retryJobAction(raw: z.input<typeof input>): Promise<Action
       throw new AppError('VALIDATION', `${job.type} jobs cannot be retried.`);
     }
 
+    if (job.ledger_id) {
+      const { data: ledger, error } = await db
+        .from('credit_ledger')
+        .select('status')
+        .eq('id', job.ledger_id)
+        .maybeSingle();
+      if (error || ledger?.status !== 'refunded') {
+        throw new AppError(
+          'CONFLICT',
+          'The original credit refund has not been confirmed. Resolve the ledger entry before retrying.',
+        );
+      }
+    } else if (job.credits_reserved > 0) {
+      throw new AppError(
+        'CONFLICT',
+        'The original credit reservation is missing. Review the ledger before retrying.',
+      );
+    }
+
     // The original payload. The reaper adds a `reaped` counter that must not carry over.
     const payload: Record<string, unknown> = { ...((job.meta as Record<string, unknown>) ?? {}) };
     delete payload.reaped;
 
-    const isBook = job.type === 'book' && job.ref_id;
-    if (isBook) {
-      await db.from('books').update({ status: 'ready' }).eq('id', job.ref_id!);
-    }
-
-    let queued;
-    try {
-      queued = await enqueueJob(db, getQueues(), {
-        type: job.type as Parameters<typeof enqueueJob>[2]['type'],
-        refId: job.ref_id,
-        userId: job.user_id,
-        amount: 0,
-        skipCredits: true,
-        payload,
-        reason: `Admin retry of job ${job.id.slice(0, 8)}`,
-      });
-    } catch (err) {
-      // Nothing was queued: put the book back where it was.
-      if (isBook) await db.from('books').update({ status: 'failed' }).eq('id', job.ref_id!);
-      throw err;
-    }
-
-    if (isBook && queued.deduplicated) {
-      // Another identical job is already live, so the book is still being written.
-      await db.from('books').update({ status: 'generating' }).eq('id', job.ref_id!);
-    }
+    const queued = await enqueueJob(db, getQueues(), {
+      type: job.type as Parameters<typeof enqueueJob>[2]['type'],
+      refId: job.ref_id,
+      userId: job.user_id,
+      amount: 0,
+      skipCredits: true,
+      retryOfJobId: job.id,
+      payload,
+      reason: `Admin retry of job ${job.id.slice(0, 8)}`,
+    });
 
     await writeAudit(db, {
       actorId: admin.id,

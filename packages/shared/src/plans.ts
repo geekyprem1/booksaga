@@ -4,6 +4,23 @@
  * across all active plans (see entitlements.ts). `grants` are ONE-TIME credit grants.
  */
 import type { LengthPreset } from './credits';
+import { z } from 'zod';
+
+export const planLimitsSchema = z
+  .object({
+    maxSeries: z.number().int().min(0).max(100000).nullable().optional(),
+    maxBooksPerSeries: z.number().int().min(0).max(30).optional(),
+    lengthPresets: z.array(z.enum(['short', 'standard', 'full'])).optional(),
+    paperbackWrap: z.boolean().optional(),
+    boxSets: z.boolean().optional(),
+    templatesTier: z.enum(['none', 'lite', 'full']).optional(),
+    dfyPacks: z.enum(['none', 'lite', 'full']).optional(),
+    audiobook: z.boolean().optional(),
+    maxClients: z.number().int().min(0).max(100000).optional(),
+    maxResellLicenses: z.number().int().min(0).max(100000).optional(),
+    franchiseKit: z.boolean().optional(),
+  })
+  .strict();
 
 export const PLAN_CODES = [
   'fe',

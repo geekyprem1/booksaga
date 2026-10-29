@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getServerEnv } from '@booksaga/shared';
 import { createClient } from '@/lib/supabase/server';
+import { VIEW_AS_COOKIE } from '@/lib/auth/view-as-token';
 
 function loginUrl(reason?: string) {
   const url = new URL('/login', getServerEnv().APP_URL);
@@ -12,7 +13,9 @@ function loginUrl(reason?: string) {
 export async function POST() {
   const supabase = await createClient();
   await supabase.auth.signOut();
-  return NextResponse.redirect(loginUrl(), 303);
+  const response = NextResponse.redirect(loginUrl(), 303);
+  response.cookies.delete(VIEW_AS_COOKIE);
+  return response;
 }
 
 /**
@@ -25,5 +28,7 @@ export async function GET(request: NextRequest) {
   }
   const supabase = await createClient();
   await supabase.auth.signOut();
-  return NextResponse.redirect(loginUrl('suspended'), 303);
+  const response = NextResponse.redirect(loginUrl('suspended'), 303);
+  response.cookies.delete(VIEW_AS_COOKIE);
+  return response;
 }

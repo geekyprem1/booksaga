@@ -1,4 +1,5 @@
 export * from './color';
+export * from './aiSettings';
 export * from './credits';
 export * from './entitlements';
 export * from './env';

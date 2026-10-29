@@ -39,7 +39,11 @@ async function seedSeries(userId: string, title: string) {
         },
       },
       locations: {},
-      world: { setting: 'A harbour city.', rules: ['Debts pass to the next of kin.'], tone: 'Tense.' },
+      world: {
+        setting: 'A harbour city.',
+        rules: ['Debts pass to the next of kin.'],
+        tone: 'Tense.',
+      },
       timeline: [],
       threads: [],
       glossary: {},
@@ -66,16 +70,34 @@ test.describe('my series & bible', () => {
     await page.goto('/my-series');
     await expect(page.getByRole('link', { name: title })).toBeVisible();
 
-    // Duplicate copies settings + bible, not the books.
-    await page.getByRole('button', { name: /Duplicate/ }).first().click();
+    // Duplicate copies settings + bible and makes fresh, unwritten roadmap parts.
+    await page
+      .getByRole('button', { name: /Duplicate/ })
+      .first()
+      .click();
     await expect(page.getByRole('link', { name: `${title} (copy)` })).toBeVisible({
       timeout: 15_000,
     });
+    const { data: copy } = await service
+      .from('series')
+      .select('id, planned_books')
+      .eq('user_id', user.id)
+      .eq('title', `${title} (copy)`)
+      .single();
+    expect(copy).not.toBeNull();
+    const { data: copyBooks } = await service
+      .from('books')
+      .select('part_number, status')
+      .eq('series_id', copy!.id)
+      .order('part_number');
+    expect(copyBooks).toHaveLength(copy!.planned_books);
+    expect(copyBooks![0]).toEqual({ part_number: 1, status: 'ready' });
+    expect(copyBooks!.slice(1).every((book) => book.status === 'locked')).toBe(true);
 
     // Delete the copy -> it moves to Trash -> restore it.
     await page
       .getByRole('link', { name: `${title} (copy)` })
-      .locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]')
+      .locator('xpath=ancestor::article[1]')
       .getByRole('button', { name: /Delete/ })
       .click();
     await expect(page.getByRole('link', { name: `${title} (copy)` })).toBeHidden({
@@ -84,7 +106,10 @@ test.describe('my series & bible', () => {
 
     await page.goto('/my-series?trash=1');
     await expect(page.getByRole('link', { name: `${title} (copy)` })).toBeVisible();
-    await page.getByRole('button', { name: /Restore/ }).first().click();
+    await page
+      .getByRole('button', { name: /Restore/ })
+      .first()
+      .click();
     await expect(page.getByRole('button', { name: /Restore/ })).toHaveCount(0, { timeout: 15_000 });
 
     await page.goto('/my-series');
@@ -119,8 +144,9 @@ test.describe('my series & bible', () => {
       .select('data')
       .eq('series_id', seriesId)
       .single();
-    const character = (bible?.data as { characters: Record<string, { source?: string; personality?: string }> })
-      .characters['mira-vance'];
+    const character = (
+      bible?.data as { characters: Record<string, { source?: string; personality?: string }> }
+    ).characters['mira-vance'];
     expect(character?.personality).toBe('Patient, watchful, slow to forgive.');
     expect(character?.source).toBe('user');
 

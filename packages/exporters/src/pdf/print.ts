@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { escapeHtml } from '../html/render';
+import { displayTitle, escapeHtml } from '../html/render';
 
 // Keep filesystem paths out of new URL(..., import.meta.url), which Turbopack treats as assets.
 const FONT_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../fonts');
@@ -104,7 +104,12 @@ export function printGeometry(trim: TrimSize, pageCount: number, bleed: boolean)
 
 /** Escape text for a CSS string literal (used in `content:` of the running heads). */
 export function cssString(text: string): string {
-  return `"${text.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n]+/g, ' ')}"`;
+  return `"${text
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/[\r\n\f]+/g, ' ')
+    .replace(/</g, '\\3C ')
+    .replace(/>/g, '\\3E ')}"`;
 }
 
 export function buildPrintHtml(input: PrintInput): string {
@@ -201,7 +206,7 @@ ${input.frontHtml}
 ${input.chapters
   .map(
     (chapter) =>
-      `<section class="chapter" id="ch-${chapter.number}"><h1><span class="chapter-number">Chapter ${chapter.number}</span>${escapeHtml(chapter.title)}</h1>${chapter.html}</section>`,
+      `<section class="chapter" id="ch-${chapter.number}"><h1><span class="chapter-number">Chapter ${chapter.number}</span>${escapeHtml(displayTitle(chapter.title))}</h1>${chapter.html}</section>`,
   )
   .join('\n')}
 ${input.backHtml}

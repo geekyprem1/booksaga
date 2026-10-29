@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { plannedChapters } from '@booksaga/shared';
 import { cleanupAccounts, createAccount, login } from './helpers';
 
 /**
@@ -8,16 +9,17 @@ import { cleanupAccounts, createAccount, login } from './helpers';
  */
 async function workerIsUp(): Promise<boolean> {
   try {
-    const res = await fetch('http://127.0.0.1:3001/healthz', {
+    const res = await fetch(process.env.WORKER_HEALTH_URL ?? 'http://127.0.0.1:3001/healthz', {
       signal: AbortSignal.timeout(1500),
     });
-    return res.ok;
+    return res.ok && (await res.json()).aiMode === 'mock';
   } catch {
     return false;
   }
 }
 
 test.afterAll(cleanupAccounts);
+test.setTimeout(90000);
 
 test.describe('series roadmap', () => {
   test('generates Part 2 after Part 1 and unlocks Part 3', async ({ page }) => {
@@ -44,23 +46,34 @@ test.describe('series roadmap', () => {
 
     // Part 2 is unlocked, Part 3 is not.
     const part2 = page.locator('[aria-label="Part 2"]');
-    await expect(part2).toContainText('ready');
-    await expect(page.locator('[aria-label="Part 3"]')).toContainText('locked');
+    await expect(part2).toContainText('Ready to generate');
+    await expect(
+      page.getByRole('button', { name: 'Generate Part 3 (locked)', exact: true }),
+    ).toBeDisabled();
 
     // Generate Part 2.
+    const generated = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' && !!response.request().headers()['next-action'],
+      { timeout: 60000 },
+    );
     await part2.getByRole('button', { name: /Generate Part 2/ }).click();
-    await expect(page.getByRole('progressbar')).toBeVisible();
-    await expect(page.getByRole('progressbar')).toBeHidden({ timeout: 240_000 });
+    await generated;
 
-    await expect(page.locator('[aria-label="Part 2"]')).toContainText('generated', {
+    await expect(page.locator('[aria-label="Part 2"]')).toContainText('Generated', {
       timeout: 60_000,
     });
-    await expect(page.locator('[aria-label="Part 3"]')).toContainText('ready');
+    await expect(page.locator('[aria-label="Part 3"]')).toContainText('Ready to generate');
 
     // The new part opens in the editor with all chapters in the list.
-    await page.locator('[aria-label="Part 2"]').getByRole('link', { name: /Open Part 2/ }).click();
+    await page
+      .locator('[aria-label="Part 2"]')
+      .getByRole('link', { name: /Open Part 2/ })
+      .click();
     await expect(page).toHaveURL(/\/books\/[0-9a-f-]{36}$/);
-    await expect(page.getByRole('button', { name: /^Reorder / })).toHaveCount(9);
+    await expect(page.getByRole('button', { name: /^Reorder / })).toHaveCount(
+      plannedChapters('short'),
+    );
 
     // Autosave: type into the chapter, wait for the 3s debounce, reload, text survives.
     const editor = page.locator('.ProseMirror');
@@ -70,7 +83,9 @@ test.describe('series roadmap', () => {
     await page.keyboard.type('Autosave check.');
     await page.waitForTimeout(4500);
     await page.reload();
-    await expect(page.locator('.ProseMirror')).toContainText('Autosave check.', { timeout: 30_000 });
+    await expect(page.locator('.ProseMirror')).toContainText('Autosave check.', {
+      timeout: 30_000,
+    });
 
     // Credits: 300 - 10 (Part 1) - 10 (Part 2) = 280.
     await expect(page.getByText('280', { exact: true }).first()).toBeVisible();

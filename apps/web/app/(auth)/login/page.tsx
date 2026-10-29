@@ -4,8 +4,10 @@ import { LoginForm } from './login-form';
 import { LogoMark } from '@/components/shell/logo';
 import { getAppInfo, isEmailEnabled } from '@/lib/settings';
 import { safeNextPath } from '@/lib/safe-redirect';
+import { LegalLinks } from '@/components/legal-links';
 
 export const metadata = { title: 'Sign in' };
+export const dynamic = 'force-dynamic';
 
 const FEATURES = [
   { icon: Sparkles, text: 'One idea in, a whole connected series out' },
@@ -26,7 +28,7 @@ export default async function LoginPage({
     <main className="app-backdrop grid min-h-dvh lg:grid-cols-2">
       <section className="hidden flex-col justify-between p-12 lg:flex">
         <div className="flex items-center gap-3">
-          <LogoMark className="size-10" />
+          <LogoMark className="size-10" logoUrl={app.logoUrl} />
           <span className="text-brand-gradient text-2xl font-extrabold tracking-tight">
             {app.name}
           </span>
@@ -55,7 +57,7 @@ export default async function LoginPage({
       <section className="flex items-center justify-center p-6">
         <div className="w-full max-w-sm rounded-2xl border border-border bg-card/80 p-8 shadow-2xl backdrop-blur">
           <div className="mb-6 flex items-center gap-2.5 lg:hidden">
-            <LogoMark />
+            <LogoMark logoUrl={app.logoUrl} />
             <span className="text-brand-gradient text-xl font-extrabold">{app.name}</span>
           </div>
           <h2 className="text-2xl font-bold">Welcome back</h2>
@@ -90,6 +92,9 @@ export default async function LoginPage({
               'Forgot your password? Contact support.'
             )}
           </p>
+          <div className="mt-6">
+            <LegalLinks />
+          </div>
         </div>
       </section>
     </main>

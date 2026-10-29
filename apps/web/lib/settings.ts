@@ -15,13 +15,17 @@ export const getSetting = cache(async <T = unknown>(key: string): Promise<T | nu
 });
 
 export const getAppInfo = cache(async () => {
-  const v = await getSetting<{ name?: string; support_email?: string; support_url?: string }>(
-    'app',
-  );
+  const v = await getSetting<{
+    name?: string;
+    support_email?: string;
+    support_url?: string;
+    logo_url?: string;
+  }>('app');
   return {
     name: v?.name || 'BookSaga',
-    supportEmail: v?.support_email || '',
+    supportEmail: v?.support_email || 'softwarevh@gmail.com',
     supportUrl: v?.support_url || '',
+    logoUrl: v?.logo_url || '',
   };
 });
 

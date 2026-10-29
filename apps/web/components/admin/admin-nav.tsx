@@ -8,6 +8,10 @@ const LINKS = [
   { href: '/admin', label: 'Overview', exact: true },
   { href: '/admin/users', label: 'Users' },
   { href: '/admin/jobs', label: 'Jobs' },
+  { href: '/admin/plans', label: 'Plans & costs' },
+  { href: '/admin/credits', label: 'Credit ledger' },
+  { href: '/admin/purchases', label: 'Purchases' },
+  { href: '/admin/settings', label: 'Settings' },
   { href: '/admin/audit', label: 'Audit log' },
 ];
 

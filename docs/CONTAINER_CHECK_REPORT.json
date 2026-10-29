@@ -1,0 +1,18 @@
+{
+  "date": "2026-10-29T04:53:29.011Z",
+  "tag": "container-check",
+  "web": {
+    "status": "ok",
+    "db": true,
+    "redis": true,
+    "hsts": "max-age=31536000",
+    "frame": "DENY",
+    "nonceCsp": true
+  },
+  "standaloneLogin": true,
+  "workerStartupWithFencing": true,
+  "envFilesExcluded": true,
+  "paidGeneration": false,
+  "mockGenerationE2e": true,
+  "passed": true
+}

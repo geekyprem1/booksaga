@@ -1,6 +1,7 @@
 import { unstable_rethrow } from 'next/navigation';
 import { ZodError } from 'zod';
 import { isAppError, type AppErrorCode } from '@booksaga/shared';
+import { assertWritable } from '@/lib/auth/view-as';
 
 export type ActionResult<T = undefined> =
   { ok: true; data: T } | { ok: false; error: { code: AppErrorCode; message: string } };
@@ -9,8 +10,12 @@ export type ActionResult<T = undefined> =
  * Wrap a Server Action body: AppErrors and validation errors become typed results the UI can
  * map to toasts / upgrade CTAs. Next.js control-flow errors (redirect, notFound) pass through.
  */
-export async function runAction<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
+export async function runAction<T>(
+  fn: () => Promise<T>,
+  options: { readOnly?: boolean } = {},
+): Promise<ActionResult<T>> {
   try {
+    if (!options.readOnly) await assertWritable();
     return { ok: true, data: await fn() };
   } catch (err) {
     unstable_rethrow(err);

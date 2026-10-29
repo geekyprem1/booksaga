@@ -8,8 +8,13 @@ coverage
 .env.local
 .env.production
 .env.*.local
+.env.*
+!.env.example
 supabase/.branches
 supabase/.temp
 test-results
 playwright-report
 .DS_Store
+.commandcode/
+*.log
+/audit-report.json

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
 import { buildEpub } from './build';
 import type { ExportChapter } from '../html/render';
+import { tableOfContents } from '../book/matter';
 
 const chapter = (number: number, title: string, text: string): ExportChapter => ({
   number,
@@ -30,6 +31,27 @@ const base = {
 };
 
 describe('EPUB3', () => {
+  it('uses a single chapter prefix and links Contents to the correct XHTML file', async () => {
+    const chapters = [chapter(3, 'Chapter 3: The Iron Chorus', 'The chorus began.')];
+    const zip = await JSZip.loadAsync(
+      await buildEpub({
+        ...base,
+        chapters,
+        frontHtml: tableOfContents(chapters),
+      }),
+    );
+    const front = await zip.file('OEBPS/front-matter.xhtml')!.async('string');
+    expect(front).toContain('href="chapter-03.xhtml#ch-3"');
+    expect(front).not.toContain('href="#ch-3"');
+    expect(front).not.toContain('Chapter 3:');
+    for (const path of ['OEBPS/chapter-03.xhtml', 'OEBPS/nav.xhtml', 'OEBPS/toc.ncx']) {
+      const xml = await zip.file(path)!.async('string');
+      expect(xml).toContain('The Iron Chorus');
+      expect(xml).not.toContain('Chapter 3: Chapter 3:');
+    }
+    expect(await zip.file('OEBPS/chapter-03.xhtml')!.async('string')).toContain('id="ch-3"');
+  });
+
   it('produces a valid package with the required entries', async () => {
     const buffer = await buildEpub(base);
     const zip = await JSZip.loadAsync(buffer);
@@ -61,8 +83,8 @@ describe('EPUB3', () => {
     const zip = await JSZip.loadAsync(buffer);
     const mimetype = zip.file('mimetype')!;
     // JSZip exposes the raw compressed size; for STORE they match.
-    expect((mimetype as unknown as { _data?: { compressedSize?: number } })._data?.compressedSize).toBe(
-      20,
-    );
+    expect(
+      (mimetype as unknown as { _data?: { compressedSize?: number } })._data?.compressedSize,
+    ).toBe(20);
   });
 });

@@ -1,5 +1,8 @@
 import { getSessionUser } from '@/lib/auth/session';
 import { getAdminDb } from '@/lib/supabase/admin';
+import { checkRateLimit } from '@booksaga/core';
+import { isAppError } from '@booksaga/shared';
+import { getQueues } from '@/lib/queue';
 
 /**
  * Signed-URL gateway for private files (T5.9).
@@ -26,10 +29,7 @@ const CONTENT_TYPES: Record<string, string> = {
   mp3: 'audio/mpeg',
 };
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ path: string[] }> },
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ path: string[] }> }) {
   const user = await getSessionUser();
   if (!user) return new Response('Unauthorized', { status: 401 });
 
@@ -44,6 +44,18 @@ export async function GET(
   const owner = objectPath.split('/')[0];
   if (owner !== user.id && user.role !== 'admin') {
     return new Response('Not found', { status: 404 });
+  }
+
+  try {
+    await checkRateLimit(getQueues(), 'downloads', user.id, 120, 60_000);
+  } catch (error) {
+    const limited = isAppError(error) && error.code === 'RATE_LIMITED';
+    return new Response(limited ? 'Too many downloads' : 'Downloads temporarily unavailable', {
+      status: limited ? 429 : 503,
+      headers: {
+        'retry-after': String(isAppError(error) ? (error.details?.retryAfter ?? 60) : 60),
+      },
+    });
   }
 
   const db = getAdminDb();

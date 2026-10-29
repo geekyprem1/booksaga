@@ -38,32 +38,38 @@ const map = (row: {
 export async function listNotificationsAction(
   limit = 20,
 ): Promise<ActionResult<NotificationRow[]>> {
-  return runAction(async () => {
-    const user = await requireUser();
-    const take = Number.isFinite(limit) ? Math.min(Math.max(Math.trunc(limit), 1), 100) : 20;
-    const { data, error } = await getAdminDb()
-      .from('notifications')
-      .select('id, type, title, body, link, read_at, created_at')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(take);
+  return runAction(
+    async () => {
+      const user = await requireUser();
+      const take = Number.isFinite(limit) ? Math.min(Math.max(Math.trunc(limit), 1), 100) : 20;
+      const { data, error } = await getAdminDb()
+        .from('notifications')
+        .select('id, type, title, body, link, read_at, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(take);
 
-    if (error) throw new AppError('INTERNAL', `Could not load notifications: ${error.message}`);
-    return (data ?? []).map(map);
-  });
+      if (error) throw new AppError('INTERNAL', `Could not load notifications: ${error.message}`);
+      return (data ?? []).map(map);
+    },
+    { readOnly: true },
+  );
 }
 
 export async function unreadCountAction(): Promise<ActionResult<number>> {
-  return runAction(async () => {
-    const user = await requireUser();
-    const { count, error } = await getAdminDb()
-      .from('notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .is('read_at', null);
-    if (error) throw new AppError('INTERNAL', `Could not count notifications: ${error.message}`);
-    return count ?? 0;
-  });
+  return runAction(
+    async () => {
+      const user = await requireUser();
+      const { count, error } = await getAdminDb()
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .is('read_at', null);
+      if (error) throw new AppError('INTERNAL', `Could not count notifications: ${error.message}`);
+      return count ?? 0;
+    },
+    { readOnly: true },
+  );
 }
 
 export async function markNotificationsReadAction(input: {

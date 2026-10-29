@@ -4,6 +4,7 @@ import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { toHexColor } from '@booksaga/shared';
 import {
   ArrowRight,
   BookOpen,
@@ -89,7 +90,7 @@ export function CoverStudio({
   const [libraryFor, setLibraryFor] = useState<{ bookId: string; title: string } | null>(null);
   const [textMode, setTextMode] = useState<'overlay' | 'ai'>('overlay');
   const [filter, setFilter] = useState<'all' | 'covered' | 'uncovered'>('all');
-  const covered = books.filter((book) => book.covers.some((cover) => cover.url));
+  const covered = books.filter((book) => book.covers.length > 0);
   const visibleBooks = books.filter(
     (book) =>
       filter === 'all' || (filter === 'covered' ? covered.includes(book) : !covered.includes(book)),
@@ -174,7 +175,7 @@ export function CoverStudio({
               {(style.palette ?? []).length ? (
                 style.palette!.map((color, index) => (
                   <span key={`${color}-${index}`}>
-                    <i className={styles[`palette${index % 4}`]} />
+                    <i style={{ backgroundColor: toHexColor(color) }} aria-hidden="true" />
                     {color}
                   </span>
                 ))
@@ -253,9 +254,14 @@ export function CoverStudio({
 
       <div className={styles.gallery} role="region" aria-label="Covers in this series" tabIndex={0}>
         {visibleBooks.map((book) => {
-          const active = book.covers.find((cover) => cover.isActive) ?? book.covers[0] ?? null;
+          const active =
+            book.covers.find((cover) => cover.isActive && cover.url) ??
+            book.covers.find((cover) => cover.url) ??
+            book.covers.find((cover) => cover.isActive) ??
+            book.covers[0] ??
+            null;
           const locked = book.status === 'locked';
-          const hasCover = Boolean(active?.url);
+          const hasCover = book.covers.length > 0;
           return (
             <article
               key={book.id}
@@ -310,7 +316,11 @@ export function CoverStudio({
                     {locked ? <LockKeyhole aria-hidden="true" /> : <ImageIcon aria-hidden="true" />}
                     <strong>{book.title}</strong>
                     <span>
-                      {locked ? 'Write this part to unlock its cover' : 'Bring this book to life'}
+                      {hasCover
+                        ? 'Cover preview unavailable. Reload to try again.'
+                        : locked
+                          ? 'Write this part to unlock its cover'
+                          : 'Bring this book to life'}
                     </span>
                     <small>{author}</small>
                   </div>

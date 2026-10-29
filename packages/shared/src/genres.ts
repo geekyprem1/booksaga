@@ -79,6 +79,35 @@ export const GENRES: readonly Genre[] = [
   { id: 'how-to-hobbies', label: 'How-To & Hobbies', isFiction: false, category: 'Self-Help' },
 ];
 
-export function getGenre(id: string): Genre | undefined {
-  return GENRES.find((g) => g.id === id);
+export function getGenre(value: string): Genre | undefined {
+  const key = value.trim().toLowerCase();
+  return GENRES.find((g) => g.id.toLowerCase() === key || g.label.toLowerCase() === key);
+}
+
+/** Canonical form genres for the niches in the DFY catalog. */
+const DFY_NICHE_GENRES: Record<string, string> = {
+  'vampire romance': 'romance',
+  'wolf shifter': 'romance',
+  'fae court': 'romance',
+  'dark academia': 'mystery-thriller',
+  'mafia romance': 'romance',
+  'alien romance': 'romance',
+  'monster romance': 'romance',
+  'reverse harem': 'romance',
+  billionaire: 'romance',
+  'small town': 'romance',
+  'second chance': 'romance',
+  'romantic suspense': 'romance',
+  'cozy witch': 'cozy-mystery',
+  'culinary cozy': 'cozy-mystery',
+  'bookshop mystery': 'cozy-mystery',
+  'space opera': 'sci-fi',
+  cyberpunk: 'sci-fi',
+  litrpg: 'fantasy',
+  'epic fantasy': 'fantasy',
+  'historical romance': 'romance',
+};
+
+export function getDfyGenre(niche: string): Genre | undefined {
+  return getGenre(niche) ?? getGenre(DFY_NICHE_GENRES[niche.trim().toLowerCase()] ?? '');
 }

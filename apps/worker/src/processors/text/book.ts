@@ -318,8 +318,6 @@ export async function processBook(
       const done = all.filter((c) => c.status === 'done').length;
       const refund = total === 0 || done / total < 0.2;
       await runner.cancel({ refund });
-      // Cancelled work stays retryable: put the part back instead of marking it failed.
-      await db.from('books').update({ status: 'ready' }).eq('id', book.id);
       return;
     }
 
@@ -487,13 +485,6 @@ export async function processBook(
   await unlockNextPart(db, series.id, book.part_number);
 
   await runner.progress(99, 'Finishing up');
-  await runner.complete({
-    title: `Part ${book.part_number} is ready`,
-    body: `${book.title || metadata.data.title} — ${totalWords.toLocaleString()} words. Open it to edit, cover and export.`,
-    link: `/series/${series.id}`,
-    type: 'book_ready',
-  });
-
   // Auto-generate a cover when the series asks for it (T4.8). Best-effort: an empty balance must
   // never fail a book that is already written and paid for.
   const autoCovers = (series.settings as { autoCovers?: boolean } | null)?.autoCovers;
@@ -525,6 +516,12 @@ export async function processBook(
       );
     }
   }
+  await runner.complete({
+    title: `Part ${book.part_number} is ready`,
+    body: `${book.title || metadata.data.title} — ${totalWords.toLocaleString()} words. Open it to edit, cover and export.`,
+    link: `/series/${series.id}`,
+    type: 'book_ready',
+  });
 }
 
 // ---------------------------------------------------------------------------
