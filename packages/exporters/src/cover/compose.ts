@@ -40,6 +40,8 @@ export interface ComposeInput {
   fontFamily: CoverFontFamily;
   /** JPEG quality, 1-100 (a 0-1 fraction is also accepted). Default 92. */
   quality?: number;
+  /** Limit the contrast gradient to the series branding on AI-lettered covers. */
+  scrim?: 'full' | 'branding';
 }
 
 const FONT_DIR = fileURLToPath(new URL('../../fonts/', import.meta.url));
@@ -101,10 +103,7 @@ export function wrapText(
  * right aligned layers must be anchored to the box edge — otherwise the server render is shifted by
  * half the box width compared with the editor preview.
  */
-export function layerAnchorX(
-  layer: Pick<CoverLayer, 'x' | 'w' | 'align'>,
-  width: number,
-): number {
+export function layerAnchorX(layer: Pick<CoverLayer, 'x' | 'w' | 'align'>, width: number): number {
   if (layer.align === 'left') return (layer.x - layer.w / 2) * width;
   if (layer.align === 'right') return (layer.x + layer.w / 2) * width;
   return layer.x * width;
@@ -132,17 +131,25 @@ export async function composeCover(input: ComposeInput): Promise<Buffer> {
   ctx.drawImage(art, (width - drawW) / 2, (height - drawH) / 2, drawW, drawH);
 
   // 2. A soft scrim top and bottom so light text stays readable on light art.
-  const topScrim = ctx.createLinearGradient(0, 0, 0, height * 0.42);
-  topScrim.addColorStop(0, 'rgba(0,0,0,0.55)');
-  topScrim.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = topScrim;
-  ctx.fillRect(0, 0, width, height * 0.42);
+  if (input.scrim === 'branding') {
+    const brandingScrim = ctx.createLinearGradient(0, 0, 0, height * 0.15);
+    brandingScrim.addColorStop(0, 'rgba(0,0,0,0.65)');
+    brandingScrim.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = brandingScrim;
+    ctx.fillRect(0, 0, width, height * 0.15);
+  } else {
+    const topScrim = ctx.createLinearGradient(0, 0, 0, height * 0.42);
+    topScrim.addColorStop(0, 'rgba(0,0,0,0.55)');
+    topScrim.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = topScrim;
+    ctx.fillRect(0, 0, width, height * 0.42);
 
-  const bottomScrim = ctx.createLinearGradient(0, height * 0.55, 0, height);
-  bottomScrim.addColorStop(0, 'rgba(0,0,0,0)');
-  bottomScrim.addColorStop(1, 'rgba(0,0,0,0.72)');
-  ctx.fillStyle = bottomScrim;
-  ctx.fillRect(0, height * 0.55, width, height * 0.45);
+    const bottomScrim = ctx.createLinearGradient(0, height * 0.55, 0, height);
+    bottomScrim.addColorStop(0, 'rgba(0,0,0,0)');
+    bottomScrim.addColorStop(1, 'rgba(0,0,0,0.72)');
+    ctx.fillStyle = bottomScrim;
+    ctx.fillRect(0, height * 0.55, width, height * 0.45);
+  }
 
   // 3. Text layers.
   const family = FAMILIES[input.fontFamily] ?? FAMILIES.serif;
@@ -160,7 +167,11 @@ export async function composeCover(input: ComposeInput): Promise<Buffer> {
     ctx.letterSpacing = layer.tracking ? `${(layer.tracking * fontSize).toFixed(1)}px` : '0px';
 
     const maxWidth = layer.w * width;
-    const lines = wrapText(ctx, text, maxWidth);
+    // Keep the series line above the book number even when the name is long.
+    const lines =
+      input.scrim === 'branding' && layer.kind === 'series'
+        ? [text]
+        : wrapText(ctx, text, maxWidth);
     const lineHeight = fontSize * 1.18;
     const anchorX = layerAnchorX(layer, width);
     // `y` is the TOP of the text block (the editor draws it the same way).

@@ -37,7 +37,12 @@ export interface RenderedPdf {
  * (`target-counter`) and clean chapter openers. Chromium's own print engine ignores all three.
  */
 // The package exports map hides dist/, so locate it relative to the resolved entry (lib/ or src/).
-const PAGED_POLYFILL = join(dirname(createRequire(import.meta.url).resolve('pagedjs')), '..', 'dist', 'paged.polyfill.js');
+const PAGED_POLYFILL = join(
+  dirname(createRequire(import.meta.url).resolve('pagedjs')),
+  '..',
+  'dist',
+  'paged.polyfill.js',
+);
 
 export async function renderPdf(
   html: string,
@@ -50,7 +55,10 @@ export async function renderPdf(
   } catch (err) {
     if (!paged) throw err;
     // A typesetting quirk must never block an export: fall back to plain Chromium.
-    console.warn('[pdf] Paged.js failed, using native print:', err instanceof Error ? err.message : err);
+    console.warn(
+      '[pdf] Paged.js failed, using native print:',
+      err instanceof Error ? err.message : err,
+    );
     return renderOnce(html, geometry, false);
   }
 }
@@ -65,6 +73,8 @@ async function renderOnce(
 
   try {
     await page.setContent(html, { waitUntil: 'load' });
+    // Pagination must use the same fonts that will be embedded in the final PDF.
+    await page.evaluate('document.fonts.ready');
     if (paged) {
       await page.addScriptTag({ content: 'window.PagedConfig = { auto: false };' });
       await page.addScriptTag({ path: PAGED_POLYFILL });

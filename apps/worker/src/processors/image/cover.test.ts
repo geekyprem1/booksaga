@@ -2,7 +2,21 @@ import { expect, it, vi } from 'vitest';
 import type { AiClient } from '@booksaga/ai';
 import type { DbClient } from '@booksaga/core';
 import type { JobRunner } from '../../lib/jobs';
-import { processCover } from './cover';
+import { defaultLayers } from '@booksaga/exporters';
+import { aiCoverBranding, processCover } from './cover';
+
+it('adds only the exact series and book number to AI-lettered artwork', () => {
+  const layers = defaultLayers({
+    seriesTitle: 'The Bennett Sisters',
+    title: 'The Third Daughter',
+    partNumber: 2,
+    author: 'Writer',
+  });
+  expect(aiCoverBranding(layers).map(({ kind, text }) => ({ kind, text }))).toEqual([
+    { kind: 'series', text: 'The Bennett Sisters' },
+    { kind: 'part', text: 'Book 2' },
+  ]);
+});
 
 it('never calls AI or locks an art direction when using a library image', async () => {
   const update = vi.fn();

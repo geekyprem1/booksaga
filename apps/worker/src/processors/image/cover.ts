@@ -12,13 +12,18 @@ import { randomUUID } from 'node:crypto';
 import { coverBriefSchema, type Bible, type CoverBrief } from '@booksaga/shared';
 import type { AiClient } from '@booksaga/ai';
 import { composeCover, defaultLayers, type CoverLayer } from '@booksaga/exporters';
-import sharp from 'sharp';
 import type { Database, DbClient } from '@booksaga/core';
 
 type JsonColumn = Database['public']['Tables']['covers']['Insert']['layers'];
 const asJson = (value: unknown) => value as NonNullable<JsonColumn>;
 import type { JobRunner } from '../../lib/jobs';
 import { coverBriefPrompt, coverImagePrompt, fallbackBrief } from '../../prompts/v1/cover';
+
+export function aiCoverBranding(layers: CoverLayer[]): CoverLayer[] {
+  return layers
+    .filter((layer) => layer.kind === 'series' || layer.kind === 'part')
+    .map((layer) => ({ ...layer, color: '#ffffff' }));
+}
 
 export interface CoverJobData {
   jobId: string;
@@ -178,19 +183,27 @@ export async function processCover(
     palette: style.palette,
   });
 
-  // AI text mode: the model lettered the cover itself, so only resize — compositing our own type
-  // on top would double it.
+  // AI-lettered artwork already contains the title and author. Add only the series and book lines,
+  // keeping them deterministic without duplicating the model's lettering.
   const [ebook, print] =
     data.textMode === 'ai'
       ? await Promise.all([
-          sharp(artBuffer)
-            .resize(1600, 2560, { fit: 'cover', position: 'centre' })
-            .jpeg({ quality: 92 })
-            .toBuffer(),
-          sharp(artBuffer)
-            .resize(1856, 2784, { fit: 'cover', position: 'centre' })
-            .jpeg({ quality: 92 })
-            .toBuffer(),
+          composeCover({
+            art: artBuffer,
+            width: 1600,
+            height: 2560,
+            layers: aiCoverBranding(layers),
+            fontFamily: style.fontFamily,
+            scrim: 'branding',
+          }),
+          composeCover({
+            art: artBuffer,
+            width: 1856,
+            height: 2784,
+            layers: aiCoverBranding(layers),
+            fontFamily: style.fontFamily,
+            scrim: 'branding',
+          }),
         ])
       : await Promise.all([
           composeCover({

@@ -24,9 +24,14 @@ let fontCss: string | null = null;
 export function printFontCss(): string {
   if (fontCss !== null) return fontCss;
   try {
-    const face = (file: string, style: 'normal' | 'italic') =>
-      `@font-face { font-family: 'EB Garamond'; font-style: ${style}; font-weight: 400 800; src: url(data:font/ttf;base64,${readFileSync(join(FONT_DIR, file)).toString('base64')}) format('truetype'); }`;
-    fontCss = `${face('EBGaramond-VF.ttf', 'normal')}\n${face('EBGaramond-Italic-VF.ttf', 'italic')}`;
+    // Static instances allow Chromium to embed fonts with reliable Unicode mappings in PDFs.
+    const face = (file: string, style: 'normal' | 'italic', weight: number) =>
+      `@font-face { font-family: 'EB Garamond'; font-style: ${style}; font-weight: ${weight}; src: url(data:font/ttf;base64,${readFileSync(join(FONT_DIR, file)).toString('base64')}) format('truetype'); }`;
+    fontCss = [
+      face('EBGaramond-Regular.ttf', 'normal', 400),
+      face('EBGaramond-Bold.ttf', 'normal', 700),
+      face('EBGaramond-Italic.ttf', 'italic', 400),
+    ].join('\n');
   } catch {
     // Missing font files must not fail an export: fall back to the system serif.
     fontCss = '';
@@ -147,8 +152,7 @@ body {
   font-family: 'EB Garamond', Georgia, 'Times New Roman', serif;
   font-size: 12pt;
   line-height: 1.38;
-  text-align: justify;
-  hyphens: auto;
+  text-align: left;
 }
 h1, h2 { font-family: 'EB Garamond', Georgia, serif; break-after: avoid; }
 p { margin: 0 0 0.35em; text-indent: 1.2em; orphans: 3; widows: 3; text-align-last: left; }
@@ -159,7 +163,7 @@ hr.scene-break::after { content: '* * *'; letter-spacing: 0.5em; }
 .chapter .chapter { break-before: auto; }
 @page chapter:first { @top-center { content: none; } @bottom-center { content: none; } }
 @page :blank { @top-center { content: none; } @bottom-center { content: none; } }
-.chapter h1 { font-size: 18pt; margin: 2.2in 0 0.6em; text-align: center; }
+.chapter h1 { font-size: 18pt; margin: 0.75in 0 0.6em; text-align: center; }
 .chapter h1 .chapter-number { display: block; font-size: 9pt; letter-spacing: 0.25em; text-transform: uppercase; color: ${accent}; margin-bottom: 0.5em; }
 .title-page { page: plain; break-after: page; text-align: center; padding-top: 2.2in; }
 .title-page .series-name { font-size: 9pt; letter-spacing: 0.25em; text-transform: uppercase; }
@@ -183,7 +187,7 @@ hr.scene-break::after { content: '* * *'; letter-spacing: 0.5em; }
 .back-matter { page: plain; break-before: page; }
 .back-matter.end-of-book { break-before: right; }
 .back-matter p { text-indent: 0; }
-.title-page p, .end-of-book p { text-indent: 0; }
+.title-page p, .end-of-book p { text-indent: 0; text-align-last: center; }
 .end-of-book { text-align: center; padding-top: 3in; }
 .end-of-book .end-mark { letter-spacing: 0.3em; text-transform: uppercase; color: ${accent}; font-weight: bold; }
 .end-of-book .continued { font-style: italic; }
